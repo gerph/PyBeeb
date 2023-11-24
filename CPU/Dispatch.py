@@ -37,7 +37,7 @@ class Dispatcher:
                                  "inx": addressDispatcher.indirectXRead,
                                  "iny": addressDispatcher.indirectYRead
                                }
-        
+
         self.executionTable = { "ADC" : executionDispatcher.ADC,
                                 "AND" : executionDispatcher.AND,
                                 "ASL" : executionDispatcher.ASL,
@@ -105,7 +105,7 @@ class Dispatcher:
                                 "PS" : writebackDispatcher.PS,
                                 "NW" : writebackDispatcher.NW
                                 }
-    
+
     def dataDecode(self, opcode):
         addressingMode = self.decoder.addressingMode(opcode)
         return self.dataTable[addressingMode]()
@@ -113,24 +113,24 @@ class Dispatcher:
     def addressDecode(self, opcode):
         addressingMode = self.decoder.addressingMode(opcode)
         return self.addressTable[addressingMode]()
-    
+
     def dispatch(self):
         #Decode
         opcode = self.memory.readByte(self.registers.pc)
         instruction = self.decoder.instruction(opcode)
         writeback = self.decoder.writeback(opcode)
         self.registers.nextPC = self.registers.pc + self.decoder.instructionLength(opcode)
-        
+
         #execute
         data = self.dataDecode(opcode)
         address = self.addressDecode(opcode)
         result = self.executionTable[instruction](data, address)
-        
+
         if result != None:
             self.writebackTable[writeback](result, address)
-            
+
         self.registers.pc = self.registers.nextPC
-        
+
         return result
 
     def reset(self):

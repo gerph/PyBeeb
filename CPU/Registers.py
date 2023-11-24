@@ -12,7 +12,7 @@ class RegisterBank(object):
         self.x  = 0x00
         self.y  = 0x00
         self.nextPC = 0x0000
-        
+
         self.carry = False
         self.zero = False
         self.int = False
@@ -20,7 +20,7 @@ class RegisterBank(object):
         self.brk = False
         self.overflow = False
         self.negative = False
-        
+
     def ps(self):
         return ( (1 if self.carry else 0) |
                  (2 if self.zero else 0) |
@@ -29,7 +29,7 @@ class RegisterBank(object):
                  (16 if self.brk else 0) |
                  (64 if self.overflow else 0) |
                  (128 if self.negative else 0) )
-        
+
     def setPS(self, value):
         self.carry = (value & 0x1) != 0
         self.zero = (value & 0x2) != 0
@@ -47,10 +47,10 @@ class RegisterBank(object):
         self.nextPC = 0
         self.sp = 0xff
         self.setPS(0)
-        
+
     def status(self):
-       
-       
+
+
         print "%s%s.%s%s%s%s%s" % (
                                    "N" if self.negative else "-",
                                    "V" if self.overflow else "-",
@@ -58,7 +58,6 @@ class RegisterBank(object):
                                    "D" if self.dec else "-",
                                    "I" if self.int else "-",
                                    "Z" if self.zero else "-",
-                                   "C" if self.carry else "-"),        
+                                   "C" if self.carry else "-"),
         print "A: %s X: %s Y: %s" % (hex(self.a), hex(self.x), hex(self.y)),
         print "PC: %s SP: %s" % (hex(self.pc), hex(self.sp))
-        

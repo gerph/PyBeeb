@@ -13,27 +13,27 @@ class ExecutionDispatcher(object):
     class NotImplementedException(BaseException):
         def __init__(self):
             self.instr = ""
-            
+
         def __repr__(self):
             "%s is not implemented"
-            
+
     def __init__(self, memory, registers):
         self.memory = memory
         self.registers = registers
-    
+
     def pushByte(self, value):
         self.memory.writeByte(self.registers.sp + 0x100, value)
         self.registers.sp -= 1
         if self.registers.sp < 0x00:
             raise StackOverflowException()
-        
+
     def pullByte(self):
         self.registers.sp += 1
         if self.registers.sp > 0xff:
             raise StackUnderflowException()
-        
+
         return self.memory.readByte(self.registers.sp + 0x100)
-    
+
     def pushWord(self, value):
         self.pushByte( value >> 8)
         self.pushByte( value & 0xff )
@@ -42,16 +42,16 @@ class ExecutionDispatcher(object):
         lw = self.pullByte()
         hw = self.pullByte() << 8
         return lw + hw
-    
+
     def doCompare(self, mem, reg):
         result = reg - mem
         self.registers.negative = (result < 0 or result > 127)
         self.registers.zero = (result == 0)
         self.registers.carry = (result >= 0)
-    
+
     def ADC(self, data, address):
         result = self.registers.a + data + (1 if self.registers.carry else 0)
-        self.registers.negative = (result & 0x80) != 0 
+        self.registers.negative = (result & 0x80) != 0
         self.registers.carry = (result > 255)
         self.registers.zero = (result == 0)
         return result & 0xff
@@ -117,7 +117,7 @@ class ExecutionDispatcher(object):
         self.pushWord(self.registers.pc + 2)
         self.pushByte(self.registers.ps())
         return self.memory.readWord(0xfffe)
-        
+
     def BVC(self, data, address):
         if not self.registers.overflow:
             return address
@@ -278,7 +278,7 @@ class ExecutionDispatcher(object):
         self.registers.setPS(self.pullByte())
         self.registers.brk = False
         return self.pullWord()
-        
+
 
     def RTS(self, data, address):
         location = self.pullWord()

@@ -187,28 +187,28 @@ class ExecutionUnit(object):
 class WritebackDispatcher(object):
     def A(self, value, location):
         pass
-        
+
     def X(self, value, location):
         pass
-        
+
     def Y(self, value, location):
         pass
-        
+
     def memory(self, value, location):
         pass
-        
+
     def PC(self, value, location):
         pass
-        
+
     def SP(self, value, location):
         pass
-        
+
     def PS(self, value, location):
         pass
-    
+
     def NW(self, value, location):
         pass
-            
+
 class Disassembler(object):
     def __init__(self, decoderTablePath):
         executionDispatcher = ExecutionUnit()
@@ -222,18 +222,17 @@ class Disassembler(object):
     class Generator(object):
         def __init__(self, dispatcher):
             self.dispatcher = dispatcher
-            
+
         def __iter__(self):
             return self.next()
-        
+
         def next(self):
             while True:
                 yield self.dispatcher.dispatch()
-        
+
     def disassemble(self, data):
         self.memory.map( (0, len(data)), ArrayMemMapper.Mapper(data))
         generator = self.Generator(self.dispatch)
         for decode in generator:
             print "%s " % (self.registers.pc),
             print ": %s " % (decode)
-        

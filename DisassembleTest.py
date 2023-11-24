@@ -12,7 +12,7 @@ DecoderTablePath = "insts.csv"
 def main():
     disassembler = Disassembler.Disassembler(DecoderTablePath)
     disassembler.disassemble(TestData.testROM1)
-    
-    
+
+
 if __name__ == '__main__':
     main()
