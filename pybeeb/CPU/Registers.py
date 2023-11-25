@@ -5,6 +5,7 @@ Created on 12 Oct 2011
 '''
 
 class RegisterBank(object):
+
     def __init__(self):
         self.pc = 0x0000
         self.sp = 0xff
@@ -20,6 +21,16 @@ class RegisterBank(object):
         self.brk = False
         self.overflow = False
         self.negative = False
+
+    def __repr__(self):
+        state = []
+        state.append('pc: &%04x' % (self.pc,))
+        state.append('sp: &%02x' % (self.sp,))
+        state.append('a: &%02x' % (self.a,))
+        state.append('x: &%02x' % (self.x,))
+        state.append('y: &%02x' % (self.y,))
+        return "<{}({})>".format(self.__class__.__name__, ', '.join(state))
+
 
     def ps(self):
         return ( (1 if self.carry else 0) |
@@ -49,8 +60,6 @@ class RegisterBank(object):
         self.setPS(0)
 
     def status(self):
-
-
         print "%s%s.%s%s%s%s%s" % (
                                    "N" if self.negative else "-",
                                    "V" if self.overflow else "-",
