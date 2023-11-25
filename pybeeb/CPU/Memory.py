@@ -25,6 +25,11 @@ class Memory(object):
             self.range = range
             self.callback = callback
 
+        def __repr__(self):
+            return "<{}(base=&{:04x}, end=&{:04x}, callback={!r})>".format(self.__class__.__name__,
+                                                                           self.base(), self.end(),
+                                                                           self.callback)
+
         def base(self):
             return self.range[0]
 
@@ -121,7 +126,7 @@ class Memory(object):
                     end = map.end()
                 mappedDevice = map.callback
                 base = map.base()
-                map_data = bytearray([mappedDevice.readByte(offset) for offset in range(address - base, end)])
+                map_data = bytearray([mappedDevice.readByte(offset) for offset in range(address - base, end - base)])
                 data += map_data
 
             else:
@@ -130,7 +135,7 @@ class Memory(object):
                 map = self.getNextMap(address)
                 if map:
                     # there is a following map.
-                    next_start = address - size
+                    next_start = map.base()
                 else:
                     next_start = 0x10000
 
@@ -150,7 +155,7 @@ class Memory(object):
         Read multiple bytes into a bytearray / mapped region.
         """
         size = len(value)
-        if not isinstance(value):
+        if not isinstance(value, bytearray):
             value = bytearray(value)
 
         if address < 0:
@@ -174,7 +179,7 @@ class Memory(object):
                 map = self.getNextMap(address)
                 if map:
                     # there is a following map.
-                    next_start = address - size
+                    next_start = map.base()
                 else:
                     next_start = 0x10000
 
@@ -187,8 +192,6 @@ class Memory(object):
             value = value[end - address:]
             size -= (end - address)
             address = end
-
-        return data
 
     def readSignedByte(self, address):
         b = self.readByte(address)
