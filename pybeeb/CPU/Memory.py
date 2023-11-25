@@ -29,10 +29,11 @@ class Memory(object):
             return self.range[0]
 
         def end(self):
+            # Note: end is inclusive
             return self.range[1]
 
         def isInMap(self, address):
-            return True if address >= self.base() and address < self.end()  else False
+            return True if address >= self.base() and address <= self.end()  else False
 
     MEMORYSIZE = 64 * 1024
     def __init__(self):
