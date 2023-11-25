@@ -4,18 +4,22 @@ Created on 13 Oct 2011
 @author: chris.whitworth
 '''
 
-class StackOverflowException(BaseException):
+class ExecutionException(Exception):
     pass
-class StackUnderflowException(BaseException):
+
+class StackOverflowException(ExecutionException):
     pass
+
+class StackUnderflowException(ExecutionException):
+    pass
+
+class NotImplementedException(ExecutionException):
+    def __init__(self, opcode):
+        self.opcode = opcode
+        super(NotImplementedException, self).__init__("Opcode &%08x is not implemented" % (opcode,))
+
 
 class ExecutionDispatcher(object):
-    class NotImplementedException(BaseException):
-        def __init__(self):
-            self.instr = ""
-
-        def __repr__(self):
-            "%s is not implemented"
 
     def __init__(self, memory, registers):
         self.memory = memory
@@ -116,7 +120,8 @@ class ExecutionDispatcher(object):
         self.registers.brk = True
         self.pushWord(self.registers.pc + 2)
         self.pushByte(self.registers.ps())
-        return self.memory.readWord(0xfffe)
+        brk_handler = self.memory.readWord(0xfffe)
+        return brk_handler
 
     def BVC(self, data, address):
         if not self.registers.overflow:
@@ -279,7 +284,6 @@ class ExecutionDispatcher(object):
         self.registers.brk = False
         return self.pullWord()
 
-
     def RTS(self, data, address):
         location = self.pullWord()
         return location + 1
@@ -350,5 +354,5 @@ class ExecutionDispatcher(object):
         return result
 
     def UNDEFINED(self, data, address):
-        pass
-#        raise self.NotImplementedException()
+        opcode = self.memory.readByte(self.registers.pc)
+        raise NotImplementedException(opcode)
