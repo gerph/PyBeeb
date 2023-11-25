@@ -53,6 +53,21 @@ class Memory(object):
         else:
             return None
 
+    def getNextMap(self, address):
+        """
+        Find the map that is next, after the address we requested.
+
+        @param address: Address to search for
+
+        @return: next map after the one requested, or None if no other maps present
+        """
+        next_map = None
+        for map in self.maps:
+            if map.base() > address:
+                if not next_map or map.base() < next_map.base():
+                    next_map = map
+        return next_map
+
     def readByte(self, address):
         # TODO - add memory mapping
         if address < 0 or address > 0xffff:
@@ -85,6 +100,94 @@ class Memory(object):
             mappedDevice.writeByte(address - base, value)
         else:
             self.memory[address] = value
+
+    def readBytes(self, address, size):
+        """
+        Read multiple bytes into a bytearray / mapped region.
+        """
+        if address < 0:
+            raise InvalidAddressException(address)
+        if address + size > 0xffff:
+            raise InvalidAddressException(address + size)
+
+        data = bytearray()
+
+        while size:
+            map = self.getMapFor(address)
+            if map:
+                end = address + size
+                if end > map.end():
+                    end = map.end()
+                mappedDevice = map.callback
+                base = map.base()
+                map_data = bytearray([mappedDevice.readByte(offset) for offset in range(address - base, end)])
+                data += map_data
+
+            else:
+                # No mapping region, so this is a regular byte array,
+                # and we need to find out how far it extends.
+                map = self.getNextMap(address)
+                if map:
+                    # there is a following map.
+                    next_start = address - size
+                else:
+                    next_start = 0x10000
+
+                end = address + size
+                if end > next_start:
+                    end = next_start
+
+                data += self.memory[address:end]
+
+            size -= (end - address)
+            address = end
+
+        return data
+
+    def writeBytes(self, address, value):
+        """
+        Read multiple bytes into a bytearray / mapped region.
+        """
+        size = len(value)
+        if not isinstance(value):
+            value = bytearray(value)
+
+        if address < 0:
+            raise InvalidAddressException(address)
+        if address + size > 0xffff:
+            raise InvalidAddressException(address + size)
+
+        while size:
+            map = self.getMapFor(address)
+            if map:
+                end = address + size
+                if end > map.end():
+                    end = map.end()
+                mappedDevice = map.callback
+                base = map.base()
+                for index in range(end - address):
+                    mappedDevice.writeByte(address + index - base, value[index])
+            else:
+                # No mapping region, so this is a regular byte array,
+                # and we need to find out how far it extends.
+                map = self.getNextMap(address)
+                if map:
+                    # there is a following map.
+                    next_start = address - size
+                else:
+                    next_start = 0x10000
+
+                end = address + size
+                if end > next_start:
+                    end = next_start
+
+                self.memory[address:end] = value[:end - address]
+
+            value = value[end - address:]
+            size -= (end - address)
+            address = end
+
+        return data
 
     def readSignedByte(self, address):
         b = self.readByte(address)
