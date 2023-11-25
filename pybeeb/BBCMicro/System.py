@@ -3,9 +3,9 @@ Created on 16 Oct 2011
 
 @author: Chris
 '''
-import OS
-import PagedROM
-import Sheila
+from . import OS
+from . import PagedROM
+from . import Sheila
 
 class Beeb(object):
     def __init__(self, cpu):

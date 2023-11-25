@@ -4,7 +4,8 @@ Created on 12 Oct 2011
 @author: chris.whitworth
 '''
 
-class Dispatcher:
+class Dispatcher(object):
+
     def __init__(self, decoder, addressDispatcher, executionDispatcher, writebackDispatcher, memory, registers):
         self.decoder = decoder
         self.memory = memory
@@ -114,14 +115,29 @@ class Dispatcher:
         addressingMode = self.decoder.addressingMode(opcode)
         return self.addressTable[addressingMode]()
 
-    def dispatch(self):
-        #Decode
+    def decode(self, pc):
+        """
+        Decode an instruction at a given address.
+
+        @return: Tuple of the (opcode value, instruction name, writeback type, instruction length)
+        """
         opcode = self.memory.readByte(self.registers.pc)
         instruction = self.decoder.instruction(opcode)
         writeback = self.decoder.writeback(opcode)
-        self.registers.nextPC = self.registers.pc + self.decoder.instructionLength(opcode)
+        return (opcode, instruction, writeback, self.decoder.instructionLength(opcode))
 
-        #execute
+    def execute(self, pc, length, opcode, instruction, writeback):
+        """
+        Execute a decoded instruction.
+
+        @param pc:          address executed from
+        @param length:      length of the opcode
+        @param opcode:      opcode value
+        @param instruction: decoded instruction name
+        @param writeback:   decoded writeback type
+
+        @return:    value which was written
+        """
         data = self.dataDecode(opcode)
         address = self.addressDecode(opcode)
         result = self.executionTable[instruction](data, address)
@@ -130,6 +146,15 @@ class Dispatcher:
             self.writebackTable[writeback](result, address)
 
         self.registers.pc = self.registers.nextPC
+
+    def dispatch(self):
+        # Decode
+        pc = self.registers.pc
+        (opcode, instruction, writeback, length) = self.decode(pc)
+        self.registers.nextPC = pc + length
+
+        # Execute
+        result = self.execute(pc, length, opcode, instruction, writeback)
 
         return result
 

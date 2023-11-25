@@ -65,8 +65,9 @@ def pb_version():
 
 class PbHook(object):
 
-    def __init__(self, pb, callback, user_data=None, begin=1, end=0):
+    def __init__(self, pb, htype, callback, user_data=None, begin=1, end=0):
         self.pb = pb
+        self.htype = htype
         self.callback = callback
         self.user_data = user_data
         self.address = begin
@@ -81,25 +82,51 @@ class PbHook(object):
         self.callback(self.pb, *args)
 
 
+class PbDispatcher(Dispatch.Dispatcher):
+    """
+    Dispatcher which handles execution hooks.
+    """
+    def __init__(self, pb, decoder, addressDispatcher, executionDispatcher, writebackDispatcher, memory, registers):
+        super(PbDispatcher, self).__init__(decoder, addressDispatcher, executionDispatcher, writebackDispatcher,
+                                           memory, registers)
+        self.pb = pb
+
+        # Execution hooks - when we hit an address in the range we call the hook
+        self.hook_exec = []
+
+    def hook_add(self, hook):
+        self.hook_exec.append(hook)
+
+    def hook_del(self, hook):
+        self.hook_exec.remove(hook)
+
+    def execute(self, pc, length, opcode, instruction, writeback):
+        for hook in self.hook_exec:
+            if pc in hook:
+                hook.call(pc, length)
+        if self.pb.executing:
+            super(PbDispatcher, self).execute(pc, length, opcode, instruction, writeback)
+
+
 class Pb(object):
     insts_filename = os.path.join(os.path.dirname(__file__), 'insts.csv')
 
     def __init__(self):
         # We only support 6502, so there is no architecture or mode flag.
-        self.mem = Memory.Memory()
+        self.memory = Memory.Memory()
         self.reg = Registers.RegisterBank()
-        addrDispatch = AddressDispatcher.AddressDispatcher(self.mem, self.reg)
+        addrDispatch = AddressDispatcher.AddressDispatcher(self.memory, self.reg)
 
-        execDispatch = ExecutionUnit.ExecutionDispatcher(self.mem,self.reg)
-        writebackDispatch = Writeback.Dispatcher(self.mem,self.reg)
+        execDispatch = ExecutionUnit.ExecutionDispatcher(self.memory,self.reg)
+        writebackDispatch = Writeback.Dispatcher(self.memory,self.reg)
 
         decoder = Decoder.Decoder(self.insts_filename)
 
-        dispatch = Dispatch.Dispatcher(decoder, addrDispatch,
-                                       execDispatch, writebackDispatch,
-                                       self.mem, self.reg)
+        self.dispatch = PbDispatcher(self, decoder, addrDispatch,
+                                     execDispatch, writebackDispatch,
+                                     self.memory, self.reg)
 
-        self.bbc = BBCMicro.System.Beeb(dispatch)
+        self.bbc = BBCMicro.System.Beeb(self.dispatch)
 
         self.executing = False
 
@@ -127,9 +154,6 @@ class Pb(object):
                 PbConstants.PB_6502_REG_PS: (lambda: self.reg.ps(), lambda v: self.reg.setPS(v)),
             }
 
-        # Execution hooks - when we hit an address in the range we call the hook
-        self.hook_exec = []
-
     # emulate from @begin, and stop when reaching address @until
     def emu_start(self, begin, until, count=0):
         insts = 0
@@ -137,10 +161,6 @@ class Pb(object):
         try:
             while self.executing and self.reg.pc != until:
                 #print "%s: PC: %s" % (insts, hex(self.reg.pc))
-
-                for hook in self.hook_exec:
-                    if self.reg.pc in hook:
-                        hook.call(self.reg.pc, 1)
 
                 self.bbc.tick()
                 insts += 1
@@ -157,7 +177,7 @@ class Pb(object):
     def reg_read(self, reg_id):
         dispatch = self.reg_dispatch.get(reg_id)
         if not dispatch:
-            raise PbError(ERR_ARG)
+            raise PbError(PbConstants.PB_ERR_ARG)
 
         return dispatch[0]()
 
@@ -165,7 +185,7 @@ class Pb(object):
     def reg_write(self, reg_id, value):
         dispatch = self.reg_dispatch.get(reg_id)
         if not dispatch:
-            raise PbError(ERR_ARG)
+            raise PbError(PbConstants.PB_ERR_ARG)
 
         dispatch[1](value & 0xFF)
 
@@ -178,11 +198,11 @@ class Pb(object):
         self.memory.writeBytes(address, data)
 
     def hook_add(self, htype, callback, user_data=None, begin=1, end=0, arg1=0):
-        hook = PbHook(self, callback, user_data=user_data, begin=begin, end=end)
+        hook = PbHook(self, htype, callback, user_data=user_data, begin=begin, end=end)
         if htype & PbConstants.PB_HOOK_CODE:
-            self.hook_exec.append(hook)
+            self.dispatch.hook_add(hook)
         return hook
 
     def hook_del(self, hook):
-        if hook in self.hook_exec:
-            self.hook_exec.remove(hook)
+        if hook.htype & PbConstants.PB_HOOK_CODE:
+            self.dispatch.hook_del(hook)
