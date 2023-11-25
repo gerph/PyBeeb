@@ -79,7 +79,7 @@ class ConsoleConfig(object):
     input_escapes = True
     input_escapes_timeout = 0.2
     input_utf8 = True
-    input_backspace_code = 8
+    input_backspace_code = 127
 
 
 class Console(ConsoleBase):

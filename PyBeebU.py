@@ -37,7 +37,11 @@ if __name__ == "__main__":
     console = Console()
 
     def OS_WRCH(pb, address, size, user_data):
-        sys.stdout.write(chr(pb.reg_read(PbConstants.PB_6502_REG_A)))
+        c = pb.reg_read(PbConstants.PB_6502_REG_A)
+        if c == 127:
+            sys.stdout.write('\x08 \x08')
+        else:
+            sys.stdout.write(chr(c))
 
     def OS_RDCH(pb, address, size, user_data):
         # See: https://mdfs.net/Docs/Comp/BBC/OS1-20/DC1C
