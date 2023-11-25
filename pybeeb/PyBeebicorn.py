@@ -7,17 +7,15 @@ modifications (or just reamapping the variable names).
 
 import os.path
 
-import CPU.Memory as Memory
-import CPU.Registers as Registers
-import CPU.AddressDispatcher as AddressDispatcher
-import CPU.Writeback as Writeback
-import CPU.ExecutionUnit as ExecutionUnit
-import CPU.Dispatch as Dispatch
-import CPU.InstructionDecoder as Decoder
-import Debugging.Combiner
-import Debugging.Writeback
-import Debugging.ExecutionUnit
-import BBCMicro.System
+from .CPU import Memory as Memory
+from .CPU import Registers as Registers
+from .CPU import AddressDispatcher as AddressDispatcher
+from .CPU import Writeback as Writeback
+from .CPU import ExecutionUnit as ExecutionUnit
+from .CPU import Dispatch as Dispatch
+from .CPU import InstructionDecoder as Decoder
+from . import BBCMicro
+from .BBCMicro import System as BBCMicroSystem
 
 
 class PbConstants(object):
@@ -93,12 +91,7 @@ class Pb(object):
         addrDispatch = AddressDispatcher.AddressDispatcher(self.mem, self.reg)
 
         execDispatch = ExecutionUnit.ExecutionDispatcher(self.mem,self.reg)
-        execLogger = Debugging.ExecutionUnit.LoggingExecutionUnit()
-        combinedExec = Debugging.Combiner.Dispatcher( (execLogger, execDispatch) )
-
         writebackDispatch = Writeback.Dispatcher(self.mem,self.reg)
-        writebackLogger = Debugging.Writeback.LoggingDispatcher()
-        combinedWriteback = Debugging.Combiner.Dispatcher( (writebackLogger, writebackDispatch) )
 
         decoder = Decoder.Decoder(self.insts_filename)
 

@@ -6,7 +6,7 @@ Created on 12 Oct 2011
 
 import sys
 
-from PyBeebicorn import Pb, PbError, PbConstants
+from pybeeb.PyBeebicorn import Pb, PbError, PbConstants
 
 
 class BBC(object):
