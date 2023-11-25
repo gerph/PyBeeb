@@ -146,6 +146,7 @@ class Dispatcher(object):
             self.writebackTable[writeback](result, address)
 
         self.registers.pc = self.registers.nextPC
+        return result
 
     def dispatch(self):
         # Decode
@@ -160,4 +161,5 @@ class Dispatcher(object):
 
     def reset(self):
         self.registers.reset()
-        self.registers.pc = self.memory.readWord(0xfffc)
+        reset_handler = self.memory.readWord(0xfffc)
+        self.registers.pc = reset_handler
