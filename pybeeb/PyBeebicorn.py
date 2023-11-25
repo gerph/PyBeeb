@@ -135,7 +135,7 @@ class Pb(object):
         self.executing = False
 
         def write_pc(v):
-            print("Set PC to &%04x" % (v,))
+            #print("Set PC to &%04x" % (v,))
             self.reg.pc = v & 0xFFFF
 
         def write_sp(v):
