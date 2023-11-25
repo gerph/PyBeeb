@@ -104,8 +104,12 @@ class PbDispatcher(Dispatch.Dispatcher):
         for hook in self.hook_exec:
             if pc in hook:
                 hook.call(pc, length)
+                if pc != self.pb.reg.pc:
+                    # They changed the execution location, so we're not running this instruction any more.
+                    return self.pb.reg.pc
+
         if self.pb.executing:
-            super(PbDispatcher, self).execute(pc, length, opcode, instruction, writeback)
+            return super(PbDispatcher, self).execute(pc, length, opcode, instruction, writeback)
 
 
 class Pb(object):
@@ -131,19 +135,20 @@ class Pb(object):
         self.executing = False
 
         def write_pc(v):
-            self.reg.pc = v
+            print("Set PC to &%04x" % (v,))
+            self.reg.pc = v & 0xFFFF
 
         def write_sp(v):
-            self.reg.sp = v
+            self.reg.sp = v & 0xFF
 
         def write_a(v):
-            self.reg.a = v
+            self.reg.a = v & 0xFF
 
         def write_x(v):
-            self.reg.x = v
+            self.reg.x = v & 0xFF
 
         def write_y(v):
-            self.reg.y = v
+            self.reg.y = v & 0xFF
 
         self.reg_dispatch = {
                 PbConstants.PB_6502_REG_PC: (lambda: self.reg.pc, write_pc),
@@ -187,7 +192,7 @@ class Pb(object):
         if not dispatch:
             raise PbError(PbConstants.PB_ERR_ARG)
 
-        dispatch[1](value & 0xFF)
+        dispatch[1](value)
 
     # read data from memory
     def mem_read(self, address, size):
