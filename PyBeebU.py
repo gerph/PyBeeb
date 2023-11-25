@@ -42,7 +42,10 @@ if __name__ == "__main__":
     def OS_RDCH(pb, address, size, user_data):
         # See: https://mdfs.net/Docs/Comp/BBC/OS1-20/DC1C
         #print "OS_RDCH" # Could inject keypresses here maybe?
-        ch = console.getch()
+        while True:
+            ch = console.getch()
+            if ch is not None:
+                break
         pb.reg_write(PbConstants.PB_6502_REG_A, ord(ch))
         pb.reg_write(PbConstants.PB_6502_REG_PC, 0xDF0B)  # RTS instruction
 
