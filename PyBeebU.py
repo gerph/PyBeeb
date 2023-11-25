@@ -8,6 +8,7 @@ Created on 12 Oct 2011
 import sys
 
 from pybeeb.PyBeebicorn import Pb, PbError, PbConstants
+from console import Console
 
 
 class BBC(object):
@@ -29,13 +30,34 @@ class BBC(object):
                 self.pb.hook_del(hook)
 
 
-def OS_WRCH(pb, address, size, user_data): sys.stdout.write(chr(pb.reg_read(PbConstants.PB_6502_REG_A)))
-def OS_RDCH(pb, address, size, user_data): print "OS_RDCH" # Could inject keypresses here maybe?
-
 if __name__ == "__main__":
     OS_WRCH_LOC = 0xe0a4
     OS_RDCH_LOC = 0xdec5
+
+    console = Console()
+
+    def OS_WRCH(pb, address, size, user_data):
+        sys.stdout.write(chr(pb.reg_read(PbConstants.PB_6502_REG_A)))
+
+    def OS_RDCH(pb, address, size, user_data):
+        # See: https://mdfs.net/Docs/Comp/BBC/OS1-20/DC1C
+        #print "OS_RDCH" # Could inject keypresses here maybe?
+        ch = console.getch()
+        pb.reg_write(PbConstants.PB_6502_REG_A, ord(ch))
+        pb.reg_write(PbConstants.PB_6502_REG_PC, 0xDF0B)  # RTS instruction
+
+    def trace(pb, address, size, user_data):
+        data = pb.mem_read(address, size)
+        execcode = ' '.join('%02x' % (b,) for b in data)
+        print("&%04x: %s" % (address, execcode))
+
+    bbc = BBC()
+    #bbc.pb.hook_add(PbConstants.PB_HOOK_CODE, trace, begin=0xDEC5, end=0xDF10)
+
     syscalls = { OS_WRCH_LOC : OS_WRCH,
                  OS_RDCH_LOC : OS_RDCH }
-    bbc = BBC()
-    bbc.go(syscalls)
+    try:
+        console.terminal_init()
+        bbc.go(syscalls)
+    finally:
+        console.terminal_reset()
