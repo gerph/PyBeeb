@@ -4,13 +4,15 @@ Created on 12 Oct 2011
 @author: chris.whitworth
 '''
 
-import Disassembler
+import os
+
+import pybeeb.Disassembler
 import ROMs.TestData as TestData
 
-DecoderTablePath = "insts.csv"
+DecodeFilename = os.path.join(os.path.dirname(pybeeb.__file__), "insts.csv")
 
 def main():
-    disassembler = Disassembler.Disassembler(DecoderTablePath)
+    disassembler = pybeeb.Disassembler.Disassembler(DecodeFilename)
     disassembler.disassemble(TestData.testROM1)
 
 
