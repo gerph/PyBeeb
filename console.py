@@ -303,7 +303,8 @@ class Console(ConsoleBase):
                 self.in_escape = time.time()
                 self.in_escape_sequence = []
                 # Work out how much more time we have left until the user's request times out
-                timeout -= time.time() - now
+                if timeout is not None:
+                    timeout -= time.time() - now
             elif ch >= '\x80' and self.config.input_utf8:
                 # Likely to be the start of a UTF-8 sequence.
                 if ch >= '\xc0' and ch <= '\xf7':
@@ -325,9 +326,9 @@ class Console(ConsoleBase):
 
         if self.in_escape:
             # We know we're in an escape sequence, and we have timeout seconds left.
-            while timeout > 0 and self.in_escape:
+            while (timeout is None or timeout > 0) and self.in_escape:
                 now = time.time()
-                ch = self.int_getch(timeout=timeout)
+                ch = self.int_getch(timeout=timeout if timeout > self.config.input_escapes_timeout else self.config.input_escapes_timeout)
                 if ch is None:
                     break
                 # Escapes end with a ~, A-Z, a-z (or a timeout)
@@ -352,7 +353,8 @@ class Console(ConsoleBase):
                         break
 
                 # Work out how much more time we have left until the user's request times out
-                timeout -= time.time() - now
+                if timeout is not None:
+                    timeout -= time.time() - now
 
             if self.in_escape and time.time() > self.in_escape + self.config.input_escapes_timeout:
                 self.in_escape = False
@@ -453,7 +455,7 @@ class Console(ConsoleBase):
                 else:
                     ch = sys.stdin.read(1)
                 if ch == '':
-                    if not self.handle_eof():
+                    if not self.handle_eof() and timeout is not None:
                         # We didn't do anything, but the handle reported EOF.
                         # We're just going to wait for the timeout period, because otherwise
                         # we'll just busy wait.
