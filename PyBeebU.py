@@ -58,8 +58,15 @@ if __name__ == "__main__":
         execcode = ' '.join('%02x' % (b,) for b in data)
         print("&%04x: %s" % (address, execcode))
 
+    def mem_hook(pb, access, address, size, value, user_data):
+        print("Access %s of &%04x, size %-3i from &%04x" % ('READ' if access == PbConstants.PB_MEM_READ else 'WRITE',
+                                                            address, size,
+                                                            pb.reg_read(PbConstants.PB_6502_REG_PC)))
+
     bbc = BBC()
     #bbc.pb.hook_add(PbConstants.PB_HOOK_CODE, trace, begin=0xDEC5, end=0xDF10)
+    #bbc.pb.hook_add(PbConstants.PB_HOOK_MEM_READ | PbConstants.PB_HOOK_MEM_WRITE, mem_hook, begin=0xe00, end=0xe01)
+    #bbc.pb.hook_add(PbConstants.PB_HOOK_MEM_READ | PbConstants.PB_HOOK_MEM_WRITE, mem_hook, begin=0xe00, end=0x7c00)
 
     syscalls = { OS_WRCH_LOC : OS_WRCH,
                  OS_RDCH_LOC : OS_RDCH }

@@ -72,6 +72,7 @@ class PbHook(object):
         self.user_data = user_data
         self.address = begin
         self.end = end
+        self.size = end - begin
 
     def __contains__(self, value):
         return value >= self.address and value < self.end
@@ -112,12 +113,133 @@ class PbDispatcher(Dispatch.Dispatcher):
             return super(PbDispatcher, self).execute(pc, length, opcode, instruction, writeback)
 
 
+class PbMemory(Memory.Memory):
+
+    def __init__(self, pb):
+        super(PbMemory, self).__init__()
+        self.pb = pb
+        # We keep a list of the registered hooks, which are ordered.
+        # We also keep a list of the hooks keyed by address in the 'hook_simple_*'
+        # dictionary. These will be used if all the hooks that are registered are
+        # a single byte long, and none of them use the same address.
+        # This is likely to be the most common case, and using a dictionary
+        # we can avoid a more lengthy lookup by searching a list.
+        self.hook_read = []
+        self.hook_simple_read = {}
+        self.hook_write = []
+        self.hook_simple_write = {}
+
+    def hook_add(self, hook):
+        if hook.htype & PbConstants.PB_HOOK_MEM_READ:
+            if not self.hook_read or self.hook_simple_read:
+                # This is the first hook, or there are simple hooks present, so we
+                # can apply simple hooks.
+                if hook.size == 1 and not self.hook_simple_read.get(hook.address):
+                    # This is a simple hook, and there's no other hook in the address
+                    self.hook_simple_read[hook.address] = hook
+                else:
+                    # This is not a simple hook (or another hook at the address exists)
+                    # and there exist simple hooks, so clear them. We'll revert to slow
+                    # hooks.
+                    self.hook_simple_read = {}
+            self.hook_read.append(hook)
+
+        if hook.htype & PbConstants.PB_HOOK_MEM_WRITE:
+            if not self.hook_write or self.hook_simple_write:
+                # This is the first hook, or there are simple hooks present, so we
+                # can apply simple hooks.
+                if hook.size == 1 and not self.hook_simple_write.get(hook.address):
+                    # This is a simple hook, and there's no other hook in the address
+                    self.hook_simple_write[hook.address] = hook
+                else:
+                    # This is not a simple hook (or another hook at the address exists)
+                    # and there exist simple hooks, so clear them. We'll revert to slow
+                    # hooks.
+                    self.hook_simple_write = {}
+            self.hook_write.append(hook)
+
+    def hook_del(self, hook):
+        if hook in self.hook_read:
+            self.hook_read.remove(hook)
+            if hook.address in self.hook_simple_read:
+                del self.hook_simple_read[hook.address]
+        if hook in self.hook_write:
+            self.hook_write.remove(hook)
+            if hook.address in self.hook_simple_write:
+                del self.hook_simple_write[hook.address]
+
+    def readByte(self, address, skip_hook=False):
+        # Dispatch any hooks for this byte
+        if not skip_hook and self.hook_read:
+            if self.hook_simple_read:
+                hook = self.hook_simple_read.get(address, None)
+                if hook:
+                    hook.call(PbConstants.PB_MEM_READ, address, 1, 0)
+            else:
+                # There's no simple hooks present, but there are hooks,
+                # so we need to process them
+                for hook in self.hook_read:
+                    if address in hook:
+                        hook.call(PbConstants.PB_MEM_READ, address, 1, 0)
+
+        return super(PbMemory, self).readByte(address)
+
+    def writeByte(self, address, value, skip_hook=False):
+        # Dispatch any hooks for this byte
+        if not skip_hook and self.hook_write:
+            if self.hook_simple_write:
+                hook = self.hook_simple_write.get(address, None)
+                if hook:
+                    hook.call(PbConstants.PB_MEM_WRITE, address, 1, value)
+            else:
+                # There's no simple hooks present, but there are hooks,
+                # so we need to process them
+                for hook in self.hook_write:
+                    if address in hook:
+                        hook.call(PbConstants.PB_MEM_WRITE, address, 1, value)
+
+        super(PbMemory, self).writeByte(address, value)
+
+    def readBytes(self, address, size, skip_hook=False):
+        """
+        Read multiple bytes into a bytearray / mapped region.
+        """
+
+        # Dispatch any hooks for this range
+        if not skip_hook:
+            for hook in self.hook_read:
+                if (address, size) in hook:
+                    # Report only the region of the read that is in the hook
+                    bound_address = max(address, min(hook.address, address + size))
+                    bound_end = min(address + size, max(hook.end, address + size))
+                    hook.call(PbConstants.PB_MEM_READ, bound_address, bound_end - bound_address, 0)
+
+        return super(PbMemory, self).readBytes(address, size)
+
+    def writeBytes(self, address, value, skip_hook=False):
+        """
+        Read multiple bytes into a bytearray / mapped region.
+        """
+        # Dispatch any hooks for this range
+        if not skip_hook:
+            size = len(value)
+            for hook in self.hook_write:
+                if (address, size) in hook:
+                    # Report only the region of the write that is in the hook
+                    bound_address = max(address, min(hook.address, address + size))
+                    bound_end = min(address + size, max(hook.end, address + size))
+                    bound_value = value[bound_address - address:bound_end - address]
+                    hook.call(PbConstants.PB_MEM_READ, bound_address, bound_end - bound_address, bound_value)
+
+        super(PbMemory, self).writeBytes(address, value)
+
+
 class Pb(object):
     insts_filename = os.path.join(os.path.dirname(__file__), 'insts.csv')
 
     def __init__(self):
         # We only support 6502, so there is no architecture or mode flag.
-        self.memory = Memory.Memory()
+        self.memory = PbMemory(self)
         self.reg = Registers.RegisterBank()
         addrDispatch = AddressDispatcher.AddressDispatcher(self.memory, self.reg)
 
@@ -206,8 +328,12 @@ class Pb(object):
         hook = PbHook(self, htype, callback, user_data=user_data, begin=begin, end=end)
         if htype & PbConstants.PB_HOOK_CODE:
             self.dispatch.hook_add(hook)
+        if htype & (PbConstants.PB_HOOK_MEM_READ | PbConstants.PB_HOOK_MEM_WRITE):
+            self.memory.hook_add(hook)
         return hook
 
     def hook_del(self, hook):
         if hook.htype & PbConstants.PB_HOOK_CODE:
             self.dispatch.hook_del(hook)
+        if hook.htype & (PbConstants.PB_HOOK_MEM_READ | PbConstants.PB_HOOK_MEM_WRITE):
+            self.memory.hook_del(hook)
