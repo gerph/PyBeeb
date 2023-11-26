@@ -50,7 +50,18 @@ if __name__ == "__main__":
             ch = console.getch()
             if ch is not None:
                 break
-        pb.reg_write(PbConstants.PB_6502_REG_A, ord(ch))
+        ch = ord(ch)
+        ps = pb.reg_read(PbConstants.PB_6502_REG_PS)
+        if ch == 27:
+            ps |= PbConstants.PB_6502_FLAG_CARRY
+
+            # Bit of a hack as we don't have interrupts
+            # Set the escape flag
+            pb.mem_write(0xFF, bytearray([0x80]))
+        else:
+            ps &= ~PbConstants.PB_6502_FLAG_CARRY
+        pb.reg_write(PbConstants.PB_6502_REG_PS, ps)
+        pb.reg_write(PbConstants.PB_6502_REG_A, ch)
         pb.reg_write(PbConstants.PB_6502_REG_PC, 0xDF0B)  # RTS instruction
 
     def trace(pb, address, size, user_data):
