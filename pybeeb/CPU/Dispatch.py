@@ -10,6 +10,7 @@ class Dispatcher(object):
         self.decoder = decoder
         self.memory = memory
         self.registers = registers
+        self.addressDispatcher = addressDispatcher
         self.addressTable = { "imp": addressDispatcher.implicit,
                                  "acc": addressDispatcher.accumulator,
                                  "imm": addressDispatcher.immediate,

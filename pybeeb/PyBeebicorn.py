@@ -63,6 +63,129 @@ def pb_version():
     return (major, minor, combined)
 
 
+class Dissassemble6502(object):
+
+    def __init__(self, decoder):
+        self.decoder = decoder
+        self.disassembly_table = {
+                "imp": self.operands_imp,
+                "acc": self.operands_acc,
+                "imm": self.operands_imm,
+                "zp" : self.operands_zp,
+                "zpx": self.operands_zpx,
+                "zpy": self.operands_zpy,
+                "rel": self.operands_rel,
+                "abs": self.operands_abs,
+                "abx": self.operands_abx,
+                "aby": self.operands_aby,
+                "ind": self.operands_ind,
+                "inx": self.operands_inx,
+                "iny": self.operands_iny,
+           }
+
+    def operands_imp(self, pc):
+        return ("", '')
+
+    def operands_acc(self, pc):
+        return ("", '')
+
+    def operands_imm(self, pc):
+        b = self.read_byte(pc + 1)
+        return ("#%s" % (b,), "= &%02X" % (b,) if b > 10 else '')
+
+    def operands_zp(self, pc):
+        b = self.read_byte(pc + 1)
+        return ("&%02X" % (b,), '')
+
+    def operands_zpx(self, pc):
+        b = self.read_byte(pc + 1)
+        return ("&%02X, X" % (b,), "-> &%02X" % (b + self.reg_x(),))
+
+    def operands_zpy(self, pc):
+        b = self.read_byte(pc + 1)
+        return ("&%02X, Y" % (b,), "-> &%02X" % (b + self.reg_y(),))
+
+    def operands_rel(self, pc):
+        return ("&%04X" % (pc + self.read_signedbyte(pc + 1) + 2,), '')
+
+    def operands_abs(self, pc):
+        return ("&%04X" % (self.read_word(pc + 1),), '')
+
+    def operands_abx(self, pc):
+        addr = self.read_word(pc + 1)
+        return ("&%04X, X" % (addr,), "-> &%02X" % (addr + self.reg_x(),))
+
+    def operands_aby(self, pc):
+        addr = self.read_word(pc + 1)
+        return ("&%04X, Y" % (addr,), "-> &%02X" % (addr + self.reg_y(),))
+
+    def operands_ind(self, pc):
+        addr = self.read_word(pc + 1)
+        return ("(&%04X)" % (addr,), "-> &%04X" % (self.read_word(addr)),)
+
+    def operands_inx(self, pc):
+        addr = self.read_byte(pc + 1)
+        result = addr + self.reg_x()
+        result = result & 0xFF
+        result = self.read_word(addr)
+        return ("(&%02X, X)" % (addr,), "-> &%04X" % (result,))
+
+    def operands_iny(self, pc):
+        addr = self.read_byte(pc + 1)
+        result = self.read_word(addr) + self.reg_y()
+        return ("(&%02X), Y" % (addr,), "-> &%04X" % (result,))
+
+    def read_byte(self, address):
+        raise NotImplementedError("read_byte not implemented for {}".format(self.__class__.__name__))
+
+    def read_signedbyte(self, address):
+        raise NotImplementedError("read_signedbyte not implemented for {}".format(self.__class__.__name__))
+
+    def read_word(self, address):
+        raise NotImplementedError("read_word not implemented for {}".format(self.__class__.__name__))
+
+    def reg_x(self):
+        raise NotImplementedError("reg_x not implemented for {}".format(self.__class__.__name__))
+
+    def reg_y(self):
+        raise NotImplementedError("reg_y not implemented for {}".format(self.__class__.__name__))
+
+    def disassemble(self, pc):
+        opcode = self.read_byte(pc)
+        inst = self.decoder.instruction(opcode)
+        mode = self.decoder.addressingMode(opcode)
+        (params, comment) = self.disassembly_table[mode](pc)
+        if comment:
+            formatted = "%-8s  ; %s" % (params, comment)
+        else:
+            formatted = params
+        return (inst, formatted, params, comment)
+
+
+class Disassemble6502Pb(Dissassemble6502):
+    def __init__(self, pb):
+        super(Disassemble6502Pb, self).__init__(pb.dispatch.decoder)
+        self.pb = pb
+
+    def read_byte(self, address):
+        return self.pb.memory.readByte(address)
+
+    def read_signedbyte(self, address):
+        b = self.pb.memory.readByte(address)
+        if b & 0x80:
+            b = b - 256
+        return b
+
+    def read_word(self, address):
+        return self.pb.memory.readWord(address)
+
+    def reg_x(self):
+        return self.pb.reg.x
+
+    def reg_y(self):
+        return self.pb.reg.y
+
+
 class PbHook(object):
 
     def __init__(self, pb, htype, callback, user_data=None, begin=1, end=0):
@@ -235,6 +358,9 @@ class PbMemory(Memory.Memory):
 
 
 class Pb(object):
+    """
+    PyBeepicorn main object - similar to the Uc() objects in Unicorn.
+    """
     insts_filename = os.path.join(os.path.dirname(__file__), 'insts.csv')
 
     def __init__(self):
@@ -253,6 +379,7 @@ class Pb(object):
                                      self.memory, self.reg)
 
         self.bbc = BBCMicro.System.Beeb(self.dispatch)
+        self.dis = Disassemble6502Pb(self)
 
         self.executing = False
 

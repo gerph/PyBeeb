@@ -50,6 +50,8 @@ if __name__ == "__main__":
             ch = console.getch()
             if ch is not None:
                 break
+        if ch == b'':
+            raise Exception("EOF")
         ch = ord(ch)
         ps = pb.reg_read(PbConstants.PB_6502_REG_PS)
         if ch == 27:
@@ -66,8 +68,10 @@ if __name__ == "__main__":
 
     def trace(pb, address, size, user_data):
         data = pb.mem_read(address, size)
-        execcode = ' '.join('%02x' % (b,) for b in data)
-        print("&%04x: %s" % (address, execcode))
+        execcode = ' '.join('%02X' % (b,) for b in data)
+
+        (inst, formatted, params, comment) = pb.dis.disassemble(address)
+        print("&%04X: %-10s : %s %s" % (address, execcode, inst, formatted))
 
     def mem_hook(pb, access, address, size, value, user_data):
         print("Access %s of &%04x, size %-3i from &%04x" % ('READ' if access == PbConstants.PB_MEM_READ else 'WRITE',
@@ -75,8 +79,14 @@ if __name__ == "__main__":
                                                             pb.reg_read(PbConstants.PB_6502_REG_PC)))
 
     bbc = BBC()
-    #bbc.pb.hook_add(PbConstants.PB_HOOK_CODE, trace, begin=0xDEC5, end=0xDF10)
+
+    # Trace all the ROM execution
+    #bbc.pb.hook_add(PbConstants.PB_HOOK_CODE, trace, begin=0x8000, end=0xC000)
+
+    # Report memory reads and writes around PAGE
     #bbc.pb.hook_add(PbConstants.PB_HOOK_MEM_READ | PbConstants.PB_HOOK_MEM_WRITE, mem_hook, begin=0xe00, end=0xe01)
+
+    # Report memory reads and writes anywhere between the PAGE and HIMEM (video memory).
     #bbc.pb.hook_add(PbConstants.PB_HOOK_MEM_READ | PbConstants.PB_HOOK_MEM_WRITE, mem_hook, begin=0xe00, end=0x7c00)
 
     syscalls = { OS_WRCH_LOC : OS_WRCH,
@@ -84,5 +94,10 @@ if __name__ == "__main__":
     try:
         console.terminal_init()
         bbc.go(syscalls)
+    except Exception as exc:
+        if str(exc) == 'EOF':
+            print("\nEOF")
+        else:
+            raise
     finally:
         console.terminal_reset()
