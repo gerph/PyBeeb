@@ -30,7 +30,7 @@ class BBC(object):
                 self.pb.hook_del(hook)
 
 
-if __name__ == "__main__":
+def main():
     OS_WRCH_LOC = 0xe0a4
     OS_RDCH_LOC = 0xdec5
 
@@ -101,3 +101,7 @@ if __name__ == "__main__":
             raise
     finally:
         console.terminal_reset()
+
+
+if __name__ == "__main__":
+    main()

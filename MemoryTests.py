@@ -3,6 +3,7 @@
 import unittest
 import pybeeb.CPU.Memory
 
+
 class MockMapper(object):
     def __init__(self):
         self.lastByteRead = None
@@ -101,5 +102,9 @@ class OverlaidMappingTests(unittest.TestCase):
             self.assertEqual(self.secondMapper.lastByteWritten, (address - 0x100, (address & 0xff) ^ 0xff))
 
 
-if __name__ == '__main__':
+def main():
     unittest.main()
+
+
+if __name__ == '__main__':
+    main()

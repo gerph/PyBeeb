@@ -238,3 +238,5 @@ class Disassembler(object):
         for decode in generator:
             print( "%s " % (self.registers.pc)),
             print(": %s " % (decode))
+            if self.registers.pc >= len(data):
+                break
