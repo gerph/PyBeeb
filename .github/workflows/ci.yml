@@ -1,0 +1,34 @@
+---
+# Automatic testing
+#
+
+name: Tests
+
+# Controls when the action will run. Triggers the workflow on:
+#   * push on any branch.
+#   * tag creation for tags beginning with a 'v'
+on:
+  push:
+    branches: ["*"]
+    tags: ["v*"]
+  # Pull request events happen on pull request state transitions, so we probably don't want this here.
+  #pull_request:
+  #  branches: ["*"]
+
+jobs:
+  coverage:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Prepare packages
+        run: |
+          sudo apt-get install -y python2 virtualenv
+          virtualenv -p python2 venv
+          source venv/bin/activate && \
+            pip install -r requirements.txt
+
+      - name: Run the coverage tests
+        run: |
+          source venv/bin/activate && \
+            timeout 60 make coverage
