@@ -92,7 +92,7 @@ class OSRDCH(OSInterface):
     def start(self):
         self.console.terminal_init()
 
-    def end(self):
+    def stop(self):
         self.console.terminal_reset()
 
     def call(self, regs, memory):
@@ -117,6 +117,29 @@ class OSRDCH(OSInterface):
 
         # Return immediately with an RTS
         return True
+
+
+class OSCLI(OSInterface):
+    code = 0xDF89
+    vector = 0x0208
+
+    def call(self, regs, memory):
+        xy = regs.x | (regs.y << 8)
+        cli = memory.readString(xy)
+        while cli[0] == '*':
+            cli = cli[1:]
+        if ' ' in cli:
+            (command, args) = cli.split(' ', 1)
+        else:
+            command = cli
+            args = ''
+
+        return self.command(command.upper(), args)
+
+    def command(self, command, args):
+        if command == 'QUIT':
+            sys.exit()
+        return False
 
 
 def main():
@@ -146,7 +169,8 @@ def main():
 
     interface_classes = (
             OSWRCH,
-            OSRDCH
+            OSRDCH,
+            OSCLI
         )
     try:
         syscalls = {}
@@ -170,7 +194,7 @@ def main():
             raise
     finally:
         for interfaces in reversed(interfaces):
-            interface.end()
+            interface.stop()
 
 
 if __name__ == "__main__":

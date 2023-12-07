@@ -199,3 +199,14 @@ class Memory(object):
 
     def readWord(self, address):
         return self.readByte(address) + (self.readByte(address + 1) << 8)
+
+    def readString(self, address):
+        s = []
+        while True:
+            b = self.readByte(address)
+            if b == 13 or b == 0:
+                break
+            s.append(b)
+            address += 1
+
+        return bytes(bytearray(s))
