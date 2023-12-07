@@ -30,41 +30,96 @@ class BBC(object):
                 self.pb.hook_del(hook)
 
 
-def main():
-    OS_WRCH_LOC = 0xe0a4
-    OS_RDCH_LOC = 0xdec5
+class OSInterface(object):
+    code = 0x0000
+    vector = 0x200
 
-    console = Console()
+    def __init__(self):
+        """
+        Initialise the interface.
+        """
+        pass
 
-    def OS_WRCH(pb, address, size, user_data):
-        c = pb.reg_read(PbConstants.PB_6502_REG_A)
-        if c == 127:
+    def start(self):
+        """
+        System is starting; prepare the interface for use.
+        """
+        pass
+
+    def stop(self):
+        """
+        System is stopping; shut down the interface.
+        """
+        pass
+
+    def call(self, regs, memory):
+        """
+        Call the interface with a given set of parameters.
+
+        The Registers and Memory will be updated on return.
+
+        @param regs:        Registers object, containing a, x, y, pc, and sp properties + the flags
+        @param memory:      Memory object, containing the (read|write)(Byte|Bytes|Word|SignedByte) methods
+
+        @return:    True if the call has been handled (return from interface),
+                    False if call should continue at the code execution point
+        """
+        return False
+
+
+class OSWRCH(OSInterface):
+    code = 0xE0A4
+    vector = 0x020E
+
+    def call(self, regs, memory):
+        if regs.a == 127:
             sys.stdout.write('\x08 \x08')
         else:
-            sys.stdout.write(chr(c))
+            sys.stdout.write(chr(regs.a))
 
-    def OS_RDCH(pb, address, size, user_data):
+        # Return immediately with an RTS
+        return True
+
+
+class OSRDCH(OSInterface):
+    code = 0xDEC5
+    vector = 0x0210
+
+    def __init__(self):
+        super(OSRDCH, self).__init__()
+        self.console = Console()
+
+    def start(self):
+        self.console.terminal_init()
+
+    def end(self):
+        self.console.terminal_reset()
+
+    def call(self, regs, memory):
         # See: https://mdfs.net/Docs/Comp/BBC/OS1-20/DC1C
         #print "OS_RDCH" # Could inject keypresses here maybe?
         while True:
-            ch = console.getch()
+            ch = self.console.getch()
             if ch is not None:
                 break
         if ch == b'':
             raise Exception("EOF")
         ch = ord(ch)
-        ps = pb.reg_read(PbConstants.PB_6502_REG_PS)
         if ch == 27:
-            ps |= PbConstants.PB_6502_FLAG_CARRY
+            regs.carry = True
 
             # Bit of a hack as we don't have interrupts
             # Set the escape flag
-            pb.mem_write(0xFF, bytearray([0x80]))
+            memory.writeByte(0xFF, 0x80)
         else:
-            ps &= ~PbConstants.PB_6502_FLAG_CARRY
-        pb.reg_write(PbConstants.PB_6502_REG_PS, ps)
-        pb.reg_write(PbConstants.PB_6502_REG_A, ch)
-        pb.reg_write(PbConstants.PB_6502_REG_PC, 0xDF0B)  # RTS instruction
+            regs.carry = False
+        regs.a = ch
+
+        # Return immediately with an RTS
+        return True
+
+
+def main():
 
     def trace(pb, address, size, user_data):
         data = pb.mem_read(address, size)
@@ -89,10 +144,24 @@ def main():
     # Report memory reads and writes anywhere between the PAGE and HIMEM (video memory).
     #bbc.pb.hook_add(PbConstants.PB_HOOK_MEM_READ | PbConstants.PB_HOOK_MEM_WRITE, mem_hook, begin=0xe00, end=0x7c00)
 
-    syscalls = { OS_WRCH_LOC : OS_WRCH,
-                 OS_RDCH_LOC : OS_RDCH }
+    interface_classes = (
+            OSWRCH,
+            OSRDCH
+        )
     try:
-        console.terminal_init()
+        syscalls = {}
+        interfaces = []
+        for cls in interface_classes:
+            interface = cls()
+            interface.start()
+            interfaces.append(interface)
+            def hook(pb, address, size, user_data, interface=interface):
+                handled = interface.call(pb.reg, pb.memory)
+                if handled:
+                    pb.reg.pc = pb.dispatch.pullWord() + 1
+
+            syscalls[interface.code] = hook
+
         bbc.go(syscalls)
     except Exception as exc:
         if str(exc) == 'EOF':
@@ -100,7 +169,8 @@ def main():
         else:
             raise
     finally:
-        console.terminal_reset()
+        for interfaces in reversed(interfaces):
+            interface.end()
 
 
 if __name__ == "__main__":

@@ -399,12 +399,27 @@ class Pb(object):
         def write_y(v):
             self.reg.y = v & 0xFF
 
+        def read_pc():
+            return self.reg.pc & 0xFFFF
+
+        def read_sp():
+            return self.reg.sp & 0xFF
+
+        def read_a():
+            return self.reg.a & 0xFF
+
+        def read_x():
+            return self.reg.x & 0xFF
+
+        def read_y():
+            return self.reg.y & 0xFF
+
         self.reg_dispatch = {
-                PbConstants.PB_6502_REG_PC: (lambda: self.reg.pc, write_pc),
-                PbConstants.PB_6502_REG_SP: (lambda: self.reg.sp, write_sp),
-                PbConstants.PB_6502_REG_A: (lambda: self.reg.a, write_a),
-                PbConstants.PB_6502_REG_X: (lambda: self.reg.x, write_x),
-                PbConstants.PB_6502_REG_Y: (lambda: self.reg.y, write_y),
+                PbConstants.PB_6502_REG_PC: (read_pc, write_pc),
+                PbConstants.PB_6502_REG_SP: (read_sp, write_sp),
+                PbConstants.PB_6502_REG_A: (read_a, write_a),
+                PbConstants.PB_6502_REG_X: (read_x, write_x),
+                PbConstants.PB_6502_REG_Y: (read_y, write_y),
                 PbConstants.PB_6502_REG_PS: (lambda: self.reg.ps(), lambda v: self.reg.setPS(v)),
             }
 

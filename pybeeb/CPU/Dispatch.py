@@ -11,6 +11,7 @@ class Dispatcher(object):
         self.memory = memory
         self.registers = registers
         self.addressDispatcher = addressDispatcher
+        self.executionDispatcher = executionDispatcher
         self.addressTable = { "imp": addressDispatcher.implicit,
                                  "acc": addressDispatcher.accumulator,
                                  "imm": addressDispatcher.immediate,
@@ -164,3 +165,15 @@ class Dispatcher(object):
         self.registers.reset()
         reset_handler = self.memory.readWord(0xfffc)
         self.registers.pc = reset_handler
+
+    def pushByte(self, value):
+        self.executionDispatcher.pushByte(value)
+
+    def pushWord(self, value):
+        self.executionDispatcher.pushWord(value)
+
+    def pullByte(self):
+        return self.executionDispatcher.pullByte()
+
+    def pullWord(self):
+        return self.executionDispatcher.pullWord()
