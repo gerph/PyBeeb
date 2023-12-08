@@ -18,21 +18,31 @@ class ConsoleBase(object):
     """
     Console management from the host enviroment.
     """
+    _singleton = None
+    _inited = False
+
+    def __new__(cls, *args, **kwargs):
+        print("Singleton creation %r" % (cls._singleton))
+        if not cls._singleton:
+            cls._singleton = super(ConsoleBase, cls).__new__(cls, *args, **kwargs)
+        return cls._singleton
 
     # FIXME: It's arguable that the console input should run continually in a thread
     #        and push keys into buffers.
 
     def __init__(self):
-        super(ConsoleBase, self).__init__()
-        self.inited = False
-        self.cooked_newlines = True
-        self.output = sys.stdout
+        if not self._inited:
+            super(ConsoleBase, self).__init__()
+            self.terminal_active = False
+            self.cooked_newlines = True
+            self.output = sys.stdout
+            self._inited = True
 
     def terminal_init(self):
-        self.inited = True
+        self.terminal_active = True
 
     def terminal_reset(self):
-        self.inited = False
+        self.terminal_active = False
 
     def encode(self, uni):
         """
@@ -60,7 +70,7 @@ class ConsoleBase(object):
             # We don't want the base class messing with our configuration.
             return
 
-        if self.inited:
+        if self.terminal_active:
             self.terminal_reset()
 
     def getch(self, timeout=None):
@@ -168,23 +178,24 @@ try:
             }
 
         def __init__(self):
-            super(Console, self).__init__()
-            self.fd = None
-            self.is_tty = False
-            self.is_dead = False
-            self.old_settings = None
-            self.intbuf = array.array('i', [0])
-            self.config = ConsoleConfig()
-            self.original_stdout = sys.__stdout__
+            if not self._inited:
+                super(Console, self).__init__()
+                self.fd = None
+                self.is_tty = False
+                self.is_dead = False
+                self.old_settings = None
+                self.intbuf = array.array('i', [0])
+                self.config = ConsoleConfig()
+                self.original_stdout = sys.__stdout__
 
-            # ANSI Escape handling
-            self.in_utf8_sequence = []
-            self.in_escape_sequence = []
-            self.in_utf8 = False
-            self.in_escape = None
+                # ANSI Escape handling
+                self.in_utf8_sequence = []
+                self.in_escape_sequence = []
+                self.in_utf8 = False
+                self.in_escape = None
 
-            self.debug_inputescapes = False
-            self.debug_inpututf8 = False
+                self.debug_inputescapes = False
+                self.debug_inpututf8 = False
 
         def get_fd(self):
             try:
@@ -523,13 +534,15 @@ except ImportError:
             #'': '\x80', # Print (don't know what this should be, and can't trigger it)
         }
 
-        def __init__(self, ro):
-            #print("Windows terminal started")
-            super(Console, self).__init__(ro)
-            self.thread = None
-            self.alive = True
-            self.want_key = threading.Event()
-            self.input_queue = Queue.Queue()
+        def __init__(self):
+            if not self._inited:
+                #print("Windows terminal started")
+                super(Console, self).__init__()
+                self.config = ConsoleConfig()
+                self.thread = None
+                self.alive = True
+                self.want_key = threading.Event()
+                self.input_queue = Queue.Queue()
 
         def finalise(self):
             if self.thread:
@@ -538,7 +551,7 @@ except ImportError:
                     # into the msvcrt buffer, so that that request exits.
                     # This message will ONLY appear if you exit the application and the
                     # msvcrt was waiting for a key press on the console.
-                    print("Pyromaniac exited; please press a key")
+                    print("System exited; please press a key")
                     # This just causes us to stall until the keypress we were waiting on
                     # has been entered - probably because there's a mutex inside msvcrt.
                     # If we DON'T do this, the console will be left in a bad state where
@@ -591,7 +604,7 @@ except ImportError:
                 # So now we need another character to check which key it is.
                 self.want_key.set()
                 try:
-                    second_key = self.input_queue.get(self.ro.config.input_escapes_timeout)
+                    second_key = self.input_queue.get(self.config.input_escapes_timeout)
                 except Queue.Empty:
                     # No data, so return the first key
                     return key
