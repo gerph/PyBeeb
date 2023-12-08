@@ -22,7 +22,7 @@ class ConsoleBase(object):
     _inited = False
 
     def __new__(cls, *args, **kwargs):
-        print("Singleton creation %r" % (cls._singleton))
+        #print("Singleton creation %r" % (cls._singleton))
         if not cls._singleton:
             cls._singleton = super(ConsoleBase, cls).__new__(cls, *args, **kwargs)
         return cls._singleton
