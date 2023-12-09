@@ -8,7 +8,7 @@ Created on 12 Oct 2011
 import sys
 
 from pybeeb.PyBeebicorn import Pb, PbError, PbConstants
-from pybeeb.Host import BBCError, InputEOFError, OSCLI, OSBYTE, OSInterface
+from pybeeb.Host import BBCError, InputEOFError, OSCLI, OSBYTE, OSInterface, OSFILE, OSFIND, OSARGS, OSBPUT, OSBGET
 from pybeeb.Host.host import OSWRCHtty, OSRDCHtty, OSWORDtty
 
 
@@ -81,6 +81,11 @@ def main():
             OSCLIquit,
             OSBYTEversion,
             OSWORDtty,
+            OSFILE,
+            OSFIND,
+            OSARGS,
+            OSBPUT,
+            OSBGET,
         )
     try:
         syscalls = {}

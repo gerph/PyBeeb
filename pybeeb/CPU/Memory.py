@@ -200,6 +200,14 @@ class Memory(object):
     def readWord(self, address):
         return self.readByte(address) + (self.readByte(address + 1) << 8)
 
+    def readLongWord(self, address):
+        parts = self.readBytes(address, 4)
+        return parts[0] | (parts[1]<<8) | (parts[2]<<16) | (parts[3]<<24)
+
+    def writeLongWord(self, address, value):
+        parts = bytearray([value & 255, (value>>8) & 255, (value>>16) & 255, (value>>24) & 255])
+        self.writeBytes(address, value)
+
     def readString(self, address):
         s = []
         while True:

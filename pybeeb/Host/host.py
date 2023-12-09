@@ -34,7 +34,6 @@ class OSRDCHtty(OSRDCH):
 
     def readc(self):
         # See: https://mdfs.net/Docs/Comp/BBC/OS1-20/DC1C
-        #print "OS_RDCH" # Could inject keypresses here maybe?
         while True:
             ch = self.console.getch()
             if ch is not None:
@@ -45,8 +44,6 @@ class OSRDCHtty(OSRDCH):
 
 
 class OSWORDtty(OSWORD):
-    code = 0xE7EB
-    vector = 0x020C
 
     def __init__(self):
         super(OSWORDtty, self).__init__()
@@ -59,6 +56,45 @@ class OSWORDtty(OSWORD):
         # The dispatcher used will be called with the parameters
         # `(a, address, regs, memory)`.
         self.dispatch[0x00] = self.osword_readline
+
+    def osword_readline(self, a, address, regs, memory):
+        # The parameter block:
+        #     XY+ 0    Buffer address for input   LSB
+        #         1                               MSB
+        #         2    Maximum line length
+        #         3    Minimum acceptable ASCII value
+        #         4    Maximum acceptable ASCII value
+        #
+        # Only characters greater or equal to XY+3 and lesser or equal to
+        # XY+4 will be accepted.
+        #
+        # On exit, C=0 if a carriage return terminated input.
+        #          C=1 if an ESCAPE condition terminated input.
+        #          Y contains line length, including carriage return if
+        #          used.
+        input_memory = memory.readWord(address)
+        maxline = memory.readByte(address + 2)
+        lowest = memory.readByte(address + 3)
+        highest = memory.readByte(address + 4)
+
+        try:
+            sys.stdout.flush()
+            result = self.read_line(maxline, lowest, highest)
+            result = result[:maxline - 1]
+            result = result + '\r'
+            # FIXME: Note that the lowest and highest are not honoured by this
+            regs.carry = False
+            regs.Y = len(result)
+            memory.writeBytes(input_memory, bytearray(result))
+
+        except EOFError:
+            raise InputEOFError("EOF received from terminal")
+
+        except KeyboardInterrupt:
+            regs.carry = True
+            regs.Y = 0
+
+        return True
 
     def read_line(self, maxline, lowest, highest):
         """

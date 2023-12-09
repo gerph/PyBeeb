@@ -13,7 +13,12 @@ __all__ = (
         'OSWORD',
         'OSCLI',
         'OSWRCH',
-        'OSRDCH'
+        'OSRDCH',
+        'OSFILE',
+        'OSFIND',
+        'OSARGS',
+        'OSBPUT',
+        'OSBGET',
     )
 
 
@@ -173,14 +178,12 @@ class OSWORD(OSInterface):
         super(OSWORD, self).__init__()
 
         # The dispatch dictionary contains the functions that should be
-        # dispatched to handle OSBYTE calls.
+        # dispatched to handle OSWORD calls.
         # The keys in the dictionary may the value of the A register.
         # If no matching key exists, the method `osword` will be used.
         # The dispatcher used will be called with the parameters
         # `(a, address, regs, memory)`.
-        self.dispatch = {
-                0x00: self.osword_readline,
-            }
+        self.dispatch = {}
 
     def call(self, regs, memory):
         dispatcher = self.dispatch.get(regs.a, None)
@@ -190,50 +193,514 @@ class OSWORD(OSInterface):
         address = regs.x | (regs.y << 8)
         return dispatcher(regs.a, address, regs, memory)
 
-    def osword_readline(self, a, address, regs, memory):
-        # The parameter block:
-        #     XY+ 0    Buffer address for input   LSB
-        #         1                               MSB
-        #         2    Maximum line length
-        #         3    Minimum acceptable ASCII value
-        #         4    Maximum acceptable ASCII value
-        #
-        # Only characters greater or equal to XY+3 and lesser or equal to
-        # XY+4 will be accepted.
-        #
-        # On exit, C=0 if a carriage return terminated input.
-        #          C=1 if an ESCAPE condition terminated input.
-        #          Y contains line length, including carriage return if
-        #          used.
-        input_memory = memory.readWord(address)
-        maxline = memory.readByte(address + 2)
-        lowest = memory.readByte(address + 3)
-        highest = memory.readByte(address + 4)
+    def osword(self, a, address, regs, memory):
+        return False
 
-        try:
-            sys.stdout.flush()
-            result = self.read_line(maxline, lowest, highest)
-            result = result[:maxline - 1]
-            result = result + '\r'
-            # FIXME: Note that the lowest and highest are not honoured by this
-            regs.carry = False
-            regs.Y = len(result)
-            memory.writeBytes(input_memory, bytearray(result))
 
-        except EOFError:
-            raise InputEOFError("EOF received from terminal")
+class OSFILE(OSInterface):
+    code = 0xF27D
+    vector = 0x0212
 
-        except KeyboardInterrupt:
+    def __init__(self):
+        super(OSFILE, self).__init__()
+
+        # The dispatch dictionary contains the functions that should be
+        # dispatched to handle OSFILE calls.
+        # The keys in the dictionary may the value of the A register.
+        # If no matching key exists, the method `osfile` will be used.
+        # The dispatcher used will be called with the parameters
+        # `(a, filename, address, regs, memory)`.
+        self.dispatch = {}
+
+    def call(self, regs, memory):
+        dispatcher = self.dispatch.get(regs.a, None)
+        if dispatcher is None:
+            dispatcher = self.osfile
+
+        address = regs.x | (regs.y << 8)
+        filename_ptr = memory.readWord(address)
+        filename = memory.readString(filename_ptr)
+        return dispatcher(regs.a, filename, address, regs, memory)
+
+    def osfile(self, op, filename, address, regs, memory):
+        """
+        Handle an OSFILE call.
+
+        Memory block contains:
+
+        00  Address of filename, terminated by RETURN &0D
+        01
+        02  Load address of the file.
+        03  Low byte first.
+        04
+        05
+        06  Execution address of the file.
+        07  Low byte first.
+        08
+        09
+        0A  Start address of data for save,
+        0B  length of file otherwise.
+        0C  Low byte first.
+        0D
+        0E  End address of data for save,
+        0F  file attributes otherwise.
+        10  Low byte first.
+        11
+
+        Reason codes in A:
+
+        A=0     Save a block of memory as a file using the information provided in the parameter block.
+        A=1     Write the information in the parameter block to the catalogue entry for an existing file
+                (i.e. file name and addresses).
+        A=2     Write the load address (only) for an existing file.
+        A=3     Write the execution address (only) for an existing file.
+        A=4     Write the attributes (only) for an existing file.
+        A=5     Read a file's catalogue information, with the file type returned in the accumulator.
+                The information is written to the parameter block.
+        A=6     Delete the named file.
+        A=&FF   Load the named file, the address to which the file is loaded being determined by the
+                lowest byte of the execution address in the control block (XY+6).
+                If this byte is zero, the address given in the controlblock is used,
+                otherwise the file's own load address is used.
+
+        @param op:          operation code from the A register
+        @param filename:    The filename to work with
+        @param address:     The address of the block for file operations
+        @param regs:        Registers
+        @param memory:      Memory access
+
+        @return:        True if handled
+                        False if not handled
+        """
+        handled = False
+
+        if op == 0:
+            # Save
+            src_address = memory.readLongWord(address + 10)
+            src_length = memory.readLongWord(address + 14) - src_address
+            info_load = memory.readLongWord(address + 2)
+            info_exec = memory.readLongWord(address + 6)
+            handled = self.save(filename, src_address, src_length, info_load, info_exec, regs, memory)
+
+        elif op == 1:
+            # Write load+exec+attr
+            info_load = memory.readLongWord(address + 2)
+            info_exec = memory.readLongWord(address + 6)
+            info_attr = memory.readLongWord(address + 14)
+            handled = self.write_info(filename, info_load, info_exec, info_attr, regs, memory)
+
+        elif op == 2:
+            # Write load
+            info_load = memory.readLongWord(address + 2)
+            handled = self.write_load(filename, info_load, regs, memory)
+
+        elif op == 3:
+            # Write exec
+            info_exec = memory.readLongWord(address + 6)
+            handled = self.write_exec(filename, info_exec, regs, memory)
+
+        elif op == 4:
+            # Write attr
+            info_attr = memory.readLongWord(address + 14)
+            handled = self.write_attr(filename, info_attr, regs, memory)
+
+        elif op == 5:
+            # Read load+exec+attr
+            result = self.read_attr(filename, regs, memory)
+            if result:
+                handled = True
+                (info_type, info_load, info_exec, info_length, info_attr) = result
+                memory.writeLongWord(address + 2, info_load)
+                memory.writeLongWord(address + 6, info_exec)
+                memory.writeLongWord(address + 10, info_length)
+                memory.writeLongWord(address + 14, info_attr)
+                regs.a = info_type
+            else:
+                handled = False
+
+        elif op == 6:
+            # Delete
+            handled = self.delete(filename, regs, memory)
+
+        elif op == 255:
+            # Load
+            if memory.readByte(address + 6) == 0:
+                load_address = None
+            else:
+                load_address = memory.readLongWord(address + 2)
+            result = self.load(filename, load_address, regs, memory)
+            if result:
+                handled = True
+                (info_type, info_load, info_exec, info_length, info_attr) = result
+                memory.writeLongWord(address + 2, info_load)
+                memory.writeLongWord(address + 6, info_exec)
+                memory.writeLongWord(address + 10, info_length)
+                memory.writeLongWord(address + 14, info_attr)
+                regs.a = info_type
+            else:
+                handled = False
+
+        return handled
+
+    def save(self, filename, src_address, src_length, info_load, info_exec, regs, memory):
+        """
+        @param filename:    File to operate on
+        @param src_address: Start address for save
+        @param src_length:  Length of the save
+        @param info_load:   Load address
+        @param info_exec:   Exec address
+        @param info_attr:   File attributes
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:    True if the call is handled, or False if it's not handled
+        """
+        return False
+
+    def write_info(self, filename, info_load, info_exec, info_attr, regs, memory):
+        """
+        @param filename:    File to operate on
+        @param info_load:   Load address
+        @param info_exec:   Exec address
+        @param info_attr:   File attributes
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:    True if the call is handled, or False if it's not handled
+        """
+        return False
+
+    def write_load(self, filename, info_load, regs, memory):
+        """
+        @param filename:    File to operate on
+        @param info_load:   Load address
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:    True if the call is handled, or False if it's not handled
+        """
+        return False
+
+    def write_exec(self, filename, info_exec, regs, memory):
+        """
+        @param filename:    File to operate on
+        @param info_exec:   Exec address
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:    True if the call is handled, or False if it's not handled
+        """
+        return False
+
+    def write_attr(self, filename, info_attr, regs, memory):
+        """
+        @param filename:    File to operate on
+        @param info_attr:   File attributes
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:    True if the call is handled, or False if it's not handled
+        """
+        return False
+
+    def read_attr(self, filename, regs, memory):
+        """
+        @param filename:    File to operate on
+        @param info_load:   Load address
+        @param info_exec:   Exec address
+        @param info_attr:   File attributes
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:    None if not handled,
+                    Tuple of (info_type, info_load, info_exec, info_length, info_attr) if handled
+        """
+        return None
+
+    def delete(self, filename, regs, memory):
+        """
+        @param filename:    File to operate on
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:    True if the call is handled, or False if it's not handled
+        """
+        return False
+
+    def load(self, filename, load_address, regs, memory):
+        """
+        @param filename:    File to operate on
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:    None if not handled,
+                    Tuple of (info_type, info_load, info_exec, info_length, info_attr) if handled
+        """
+        return None
+
+
+
+class OSARGS(OSInterface):
+    code = 0xF1E8
+    vector = 0x0214
+
+    def __init__(self):
+        super(OSARGS, self).__init__()
+
+        # The dispatch dictionary contains the functions that should be
+        # dispatched to handle OSARGS calls.
+        # The keys in the dictionary may the value of the A register.
+        # If no matching key exists, the method `osargs` will be used.
+        # The dispatcher used will be called with the parameters
+        # `(a, fh, address, regs, memory)`.
+        self.dispatch = {}
+
+    def call(self, regs, memory):
+        dispatcher = self.dispatch.get((regs.a, regs.y), None)
+        if dispatcher is None:
+            dispatcher = self.dispatch.get(regs.a, None)
+            if dispatcher is None:
+                dispatcher = self.osargs
+
+        fh = regs.y
+        address = regs.x
+        return dispatcher(regs.a, fh, address, regs, memory)
+
+    def osargs(self, op, fh, address, regs, memory):
+        """
+        Handle OSARGS call for a given reason code and file handle.
+
+        If fh is 0:
+            A = 0:  Return current filesystem
+                1:  Return CLI args
+                255: Flush all files to storage
+        else:
+            A = 0:  Return PTR#
+                1:  Write PTR#
+                2:  Read EXT#
+                255: Flush file to storage
+        """
+        handled = False
+        if fh == 0:
+            # Filehandle = 0
+            if op == 0x00:
+                result = self.read_current_filesystem(regs, memory)
+                handled = result is not None
+                if handled:
+                    regs.a = result
+
+            elif op == 0x01:
+                # Read CLI args
+                result = self.read_cli_args(regs, memory)
+                handled = result is not None
+                if handled:
+                    memory.writeLongWord(address, result)
+
+            elif op == 0xFF:
+                # Flush all files
+                handled = self.flush_all_files(regs, memory)
+
+        else:
+            # Filehandle supplied
+            if op == 0x00:
+                # Read PTR#
+                result = self.read_ptr(fh, regs, memory)
+                handled = result is not None
+                if handled:
+                    memory.writeLongWord(address, result)
+
+            elif op == 0x01:
+                # Write PTR#
+                ptr = memory.readLongWord(address)
+                handled = self.write_ptr(fh, ptr, regs, memory)
+
+            elif op == 0x02:
+                # Read EXT#
+                handled = self.read_ext(fh, regs, memory)
+                handled = result is not None
+                if handled:
+                    memory.writeLongWord(address, result)
+
+            elif op == 0xFF:
+                # Flush file to storage
+                handled = self.flush_file(fh, regs, memory)
+
+        return False
+
+    def read_ptr(self, fh, regs, memory):
+        """
+        Read PTR#.
+
+        @param fh:      File handle to read
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:    PTR for the file, or None if not handled
+        """
+        return None
+
+    def read_ext(self, fh, regs, memory):
+        """
+        Read EXT#.
+
+        @param fh:      File handle to read
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:    EXT for the file, or None if not handled
+        """
+        return None
+
+    def write_ptr(self, fh, ptr, regs, memory):
+        """
+        Write PTR#.
+
+        @param fh:      File handle to read
+        @param ptr:     New PTR value
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:    True if handled, False if not handled
+        """
+        return None
+
+    def flush_file(self, fh, regs, memory):
+        """
+        Flush file to storage.
+
+        @param fh:      File handle to read
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:    True if handled, False if not handled
+        """
+        return False
+
+    def flush_all_files(self, regs, memory):
+        """
+        Flush all files to storage
+
+        @param fh:      File handle to read
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:    True if handled, False if not handled
+        """
+        return False
+
+    def read_current_filesystem(self, regs, memory):
+        """
+        Read the current filesystem.
+
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:    Filesystem number, or None is not handled
+        """
+        return None
+
+    def read_cli_args(self, regs, memory):
+        """
+        Read the CLI arguments.
+
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:    Address of CLI arguments, or None is not handled
+        """
+        return None
+
+
+class OSBGET(OSInterface):
+    code = 0xF4C9
+    vector = 0x0216
+
+    def call(self, regs, memory):
+        fh = regs.y
+        b = self.osbget(fh, regs, memory)
+        if b is None:
+            return False
+
+        if b == -1:
             regs.carry = True
-            regs.Y = 0
-
+        else:
+            regs.carry = False
+            regs.a = b
         return True
 
-    def read_line(self, maxline, lowest, highest):
+    def osbget(self, fh, regs, memory):
         """
-        Read a line of input; override with any other ReadLine implementation.
-        """
-        return raw_input()
+        Handle BGET, returning the byte read.
 
-    def osword(self, a, address, regs, memory):
+        @param fh:  File handle to read
+
+        @return:    byte read, -1 if at file end, or None if not handled
+        """
+        return None
+
+
+class OSBPUT(OSInterface):
+    code = 0xF529
+    vector = 0x0218
+
+    def call(self, regs, memory):
+        fh = regs.y
+        b = regs.a
+        handled = self.osbput(b, fh, regs, memory)
+        return handled
+
+    def osbput(self, b, fh, regs, memory):
+        """
+        Handle BPUT, writing the supplied byte to a file..
+
+        @param fh:  File handle to write to
+        @param b:   Byte to write
+
+        @return:    True if handled, False if not handled.
+        """
+        return False
+
+
+class OSFIND(OSInterface):
+    code = 0xF3CA
+    vector = 0x0218
+
+    def call(self, regs, memory):
+        a = regs.a
+        if a == 0:
+            fh = regs.y
+            return self.close(fh, regs, memory)
+
+        address = regs.x | (regs.y << 8)
+        filename_ptr = memory.readWord(address)
+        filename = memory.readString(filename_ptr)
+        fh = self.open(a, filename, regs, memory)
+        if fh is None:
+            return False
+        regs.a = fh
+        return True
+
+    def open(self, op, filename, regs, memory):
+        """
+        Open a file for reading, writing or update.
+
+        @param op:          operation to perform:
+                                &40: input only
+                                &80: output only
+                                &C0: input and output
+        @param filename:    file to open
+
+        @return:    file handle, or 0 if failed to open, or None if not handled
+        """
+        print("open(%i, %r)" % (op, filename))
+        return None
+
+    def close(self, fh, regs, memory):
+        """
+        Close a previously open file.
+
+        @param fh:  file handle to close, or 0 to close all files.
+
+        @return:    True if handled; False if not handled.
+        """
         return False
