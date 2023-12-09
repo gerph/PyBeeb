@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 '''
 Created on 12 Oct 2011
+Updated on 09 Dec 2023
 
-@author: chris.whitworth
+@author: chris.whitworth, gerph
 '''
 
 import sys

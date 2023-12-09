@@ -1,5 +1,52 @@
 """
 Base classes for the implementations of host interfaces.
+
+Each base class is derived from the OSInterface class, which has a standard interface
+for handling the entry point.
+
+The following properties are defined on the object:
+
+* `code`: The default address of the handler for these entry points, which is usually
+          stored in the vector entry point. For the file system interfaces, the code
+          address is for the Tape file system, so *TAPE will reselect these interfaces.
+* `vector`: The address of the the vector for this interface.
+* `dispatch`: Some objects contain a dispatch table mapping the conditions of the
+          registers to functions.
+          This is used by the interfaces which have operation codes in A (and X or Y).
+* `dispatch_default`: Default dispatch entry point if none of the `dispatch` mappings
+          are matched.
+
+The following methods are defined on the object:
+
+* `__init__`: creates the interface object.
+* `start`: should be called when the system is started and the interface is being
+           prepared for use.
+* `stop`: should be called when the system is destroyed, or the interface is no longer
+          required.
+* `call`: should be called when the OS interface is invoked. It will be passed two
+          objects - a Registers object, and a Memory object. These may be used to
+          interact with the emulator system. Returns False to continue execution with
+          the default handler, or True if the caller should return from the vector (as
+          if RTS had been executed).
+          The default `call` method will look up the operation codes using the
+          `dispatch` map and call to the `dispatch_default` function if none match.
+* `dispatch_parameters`: will interpret the registers into a default set of parameters
+          for the dispatch call.
+
+Other methods may be provided for individual interfaces to perform specific operations.
+Consult the class implementation for more details on these additional methods.
+
+To provide implementations, a new class should be created based on these base classes.
+The child class may provide a new implementation of the `start` and `stop` to initialise
+the state of the interface. New implementations may be provided for the `call` method,
+or the `dispatch` table can be updated to provide alternative handlers for operation
+codes.
+
+The OSInterface should return the error BBCError to report errors. The caller should
+trap these and trigger an error through the BRK mechanism.
+
+The input system should report InputEOFError if an EOF condition is encountered when
+reading input from the user.
 """
 
 import sys
@@ -42,7 +89,23 @@ class OSInterface(object):
         """
         Initialise the interface.
         """
-        pass
+
+        # The dispatch dictionary contains the functions that should be
+        # dispatched to handle the OSInterface calls.
+        # The keys in the dictionary may be one of:
+        #   (A, X, Y)
+        #   (A, X)
+        #   A
+        # The value of the first matched key will be used as the
+        # dispatcher.
+        # If no matching key exists, the method `dispatch_default` will
+        # be used.
+        # The dispatcher used will be called with the parameters
+        # returned by the `dispatch_parameters` method. By default these
+        # are:
+        #   (A, X, Y, regs, memory)
+        self.dispatch = {}
+        self.dispatch_default = None
 
     def start(self):
         """
@@ -55,6 +118,17 @@ class OSInterface(object):
         System is stopping; shut down the interface.
         """
         pass
+
+    def dispatch_parameters(self, regs, memory):
+        """
+        Prepare a set of parameters to pass to the dispatcher.
+
+        @param regs:        Registers object, containing a, x, y, pc, and sp properties + the flags
+        @param memory:      Memory object, containing the (read|write)(Byte|Bytes|Word|SignedByte) methods
+
+        @return:    list of parameters to pass to the dispatcher
+        """
+        return [regs.a, regs.x, regs.y, regs, memory]
 
     def call(self, regs, memory):
         """
@@ -70,6 +144,16 @@ class OSInterface(object):
         @return:    True if the call has been handled (return from interface),
                     False if call should continue at the code execution point
         """
+        dispatcher = self.dispatch.get((regs.a, regs.x, regs.y), None)
+        if dispatcher is None:
+            dispatcher = self.dispatch.get((regs.a, regs.x), None)
+            if dispatcher is None:
+                dispatcher = self.dispatch.get(regs.a, None)
+                if dispatcher is None:
+                    dispatcher = self.dispatch_default
+        if dispatcher:
+            params = self.dispatch_parameters(regs, memory)
+            return dispatcher(*params)
         return False
 
 
@@ -141,30 +225,7 @@ class OSBYTE(OSInterface):
 
     def __init__(self):
         super(OSBYTE, self).__init__()
-
-        # The dispatch dictionary contains the functions that should be
-        # dispatched to handle OSBYTE calls.
-        # The keys in the dictionary may be one of:
-        #   (A, X, Y)
-        #   (A, X)
-        #   A
-        # The value of the first matched key will be used as the
-        # dispatcher.
-        # If no matching key exists, the method `osbyte` will be used.
-        # The dispatcher used will be called with the parameters
-        # `(A, X, Y, regs, memory)`.
-        self.dispatch = {
-            }
-
-    def call(self, regs, memory):
-        dispatcher = self.dispatch.get((regs.a, regs.x, regs.y), None)
-        if dispatcher is None:
-            dispatcher = self.dispatch.get((regs.a, regs.x), None)
-            if dispatcher is None:
-                dispatcher = self.dispatch.get(regs.a, None)
-                if dispatcher is None:
-                    dispatcher = self.osbyte
-        return dispatcher(regs.a, regs.x, regs.y, regs, memory)
+        self.dispatch_default = self.osbyte
 
     def osbyte(self, a, x, y, regs, memory):
         return False
@@ -177,21 +238,16 @@ class OSWORD(OSInterface):
     def __init__(self):
         super(OSWORD, self).__init__()
 
-        # The dispatch dictionary contains the functions that should be
-        # dispatched to handle OSWORD calls.
-        # The keys in the dictionary may the value of the A register.
-        # If no matching key exists, the method `osword` will be used.
         # The dispatcher used will be called with the parameters
-        # `(a, address, regs, memory)`.
-        self.dispatch = {}
+        #   (a, address, regs, memory)
+        self.dispatch_default = self.osword
 
-    def call(self, regs, memory):
-        dispatcher = self.dispatch.get(regs.a, None)
-        if dispatcher is None:
-            dispatcher = self.osword
-
+    def dispatch_parameters(self, regs, memory):
+        """
+        Decode the paramters for the address.
+        """
         address = regs.x | (regs.y << 8)
-        return dispatcher(regs.a, address, regs, memory)
+        return [regs.a, address, regs, memory]
 
     def osword(self, a, address, regs, memory):
         return False
@@ -204,23 +260,15 @@ class OSFILE(OSInterface):
     def __init__(self):
         super(OSFILE, self).__init__()
 
-        # The dispatch dictionary contains the functions that should be
-        # dispatched to handle OSFILE calls.
-        # The keys in the dictionary may the value of the A register.
-        # If no matching key exists, the method `osfile` will be used.
-        # The dispatcher used will be called with the parameters
-        # `(a, filename, address, regs, memory)`.
-        self.dispatch = {}
+        # The default dispatcher is called with:
+        #   (op, filename, address, regs, memory)
+        self.dispatch_default = self.osfile
 
-    def call(self, regs, memory):
-        dispatcher = self.dispatch.get(regs.a, None)
-        if dispatcher is None:
-            dispatcher = self.osfile
-
+    def dispatch_parameters(self, regs, memory):
         address = regs.x | (regs.y << 8)
         filename_ptr = memory.readWord(address)
         filename = memory.readString(filename_ptr)
-        return dispatcher(regs.a, filename, address, regs, memory)
+        return [regs.a, filename, address, regs, memory]
 
     def osfile(self, op, filename, address, regs, memory):
         """
@@ -439,23 +487,14 @@ class OSFILE(OSInterface):
         return None
 
 
-
 class OSARGS(OSInterface):
     code = 0xF1E8
     vector = 0x0214
 
-    def __init__(self):
-        super(OSARGS, self).__init__()
-
-        # The dispatch dictionary contains the functions that should be
-        # dispatched to handle OSARGS calls.
-        # The keys in the dictionary may the value of the A register.
-        # If no matching key exists, the method `osargs` will be used.
-        # The dispatcher used will be called with the parameters
-        # `(a, fh, address, regs, memory)`.
-        self.dispatch = {}
-
     def call(self, regs, memory):
+        # NOTE: We do not use the standard dispatcher mechanism here
+        #       because the primary discriminator is the Y register,
+        #       rather than the A register.
         dispatcher = self.dispatch.get((regs.a, regs.y), None)
         if dispatcher is None:
             dispatcher = self.dispatch.get(regs.a, None)
@@ -665,13 +704,17 @@ class OSFIND(OSInterface):
     code = 0xF3CA
     vector = 0x0218
 
-    def call(self, regs, memory):
-        a = regs.a
-        if a == 0:
-            fh = regs.y
-            return self.close(fh, regs, memory)
+    def __init__(self):
+        super(OSFIND, self).__init__()
+        # Handle the close dispatch through the dispatch table
+        self.dispatch[0x00] = self.call_close
+        self.dispatch_default = self.call_open
 
-        address = regs.x | (regs.y << 8)
+    def call_close(self, a, x, y, regs, memory):
+        return self.close(fh=y, regs=regs, memory=memory)
+
+    def call_open(self, a, x, y, regs, memory):
+        address = x | (y << 8)
         filename_ptr = memory.readWord(address)
         filename = memory.readString(filename_ptr)
         fh = self.open(a, filename, regs, memory)
@@ -692,7 +735,6 @@ class OSFIND(OSInterface):
 
         @return:    file handle, or 0 if failed to open, or None if not handled
         """
-        print("open(%i, %r)" % (op, filename))
         return None
 
     def close(self, fh, regs, memory):

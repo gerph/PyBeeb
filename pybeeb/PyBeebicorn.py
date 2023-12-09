@@ -2,7 +2,7 @@
 Unicorn-like interface for PyBeeb.
 
 Allows code that was written for Unicorn to work with PyBeeb with minimal
-modifications (or just reamapping the variable names).
+modifications (or just remapping the variable names).
 """
 
 import os.path
@@ -47,8 +47,8 @@ class PbConstants(object):
     PB_HOOK_MEM_WRITE = 2048
 
 
-# access to error code via @errno of UcError
 class PbError(Exception):
+
     def __init__(self, errno):
         self.errno = errno
 
