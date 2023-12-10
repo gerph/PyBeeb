@@ -66,6 +66,7 @@ __all__ = (
         'OSARGS',
         'OSBPUT',
         'OSBGET',
+        'OSGBPB',
     )
 
 
@@ -746,3 +747,139 @@ class OSFIND(OSInterface):
         @return:    True if handled; False if not handled.
         """
         return False
+
+
+class OSGBPB(OSInterface):
+    code = 0xFFA6
+    vector = 0x021A
+
+    def __init__(self):
+        super(OSGBPB, self).__init__()
+        self.dispatch[0x01] = self.call_put_bytes
+        self.dispatch[0x02] = self.call_put_bytes
+        self.dispatch[0x03] = self.call_get_bytes
+        self.dispatch[0x04] = self.call_get_bytes
+        self.dispatch_default = self.osgbpb
+
+    def dispatch_parameters(self, regs, memory):
+        """
+        Decode the paramters for the address.
+        """
+        address = regs.x | (regs.y << 8)
+        return [regs.a, address, regs, memory]
+
+    def osgbpb(self, op, address, regs, memory):
+        """
+        The control block format is:
+
+        00 File handle
+        01 Pointer to data in either I/O processor or Tube
+        02   processor.
+        03 Low byte first.
+        04
+        05 Number of bytes to transfer
+        06 Low byte first.
+        07
+        08
+        09 Sequential pointer value to be used for transfer
+        0A Low byte first.
+        0B
+        0C
+
+        Operation codes:
+
+        01 Put bytes at pointer
+        02 Put bytes
+        03 Get bytes from pointer
+        04 Get bytes
+        05 Get media title and option
+        06 Read CSD and device
+        07 Read Lib and device
+        08 Read names from CSD
+        """
+        return False
+
+    def call_put_bytes(self, op, address, regs, memory):
+        """
+        Put bytes (at a given location).
+        """
+        fh = memory.readByte(address)
+        dataaddr = memory.readLongWord(address + 1)
+        datalen = memory.readLongWord(address + 5)
+        if op == 1:
+            ptr = memory.readLongWord(address + 9)
+        else:
+            ptr = None
+        data = memory.readBytes(dataaddr, datalen)
+        result = self.put_bytes(fh, data, ptr, regs, memory)
+        if result:
+            (transferred, newptr) = result
+            if transferred != datalen:
+                regs.carry = True
+                memory.writeLongWord(address + 5, datalen - transferred)
+            else:
+                regs.carry = False
+            memory.writeLongWord(address + 1, dataaddr + transferred)
+            memory.writeLongWord(address + 9, newptr)
+            handled = True
+        else:
+            handled = False
+        return handled
+
+    def call_get_bytes(self, op, address, regs, memory):
+        """
+        Put bytes (at a given location).
+        """
+        fh = memory.readByte(address)
+        dataaddr = memory.readLongWord(address + 1)
+        datalen = memory.readLongWord(address + 5)
+        if op == 1:
+            ptr = memory.readLongWord(address + 9)
+        else:
+            ptr = None
+        result = self.get_bytes(fh, datalen, ptr, regs, memory)
+        if result:
+            (data, newptr) = result
+            transferred = len(data)
+            if transferred != datalen:
+                regs.carry = True
+                memory.writeLongWord(address + 5, datalen - transferred)
+            else:
+                regs.carry = False
+            memory.writeLongWord(address + 1, dataaddr + transferred)
+            memory.writeLongWord(address + 9, newptr)
+            memory.writeBytes(dataaddr, data)
+            handled = True
+        else:
+            handled = False
+        return handled
+
+    def put_bytes(self, fh, data, ptr, regs, memory):
+        """
+        Put bytes to an open file handle.
+
+        @param fh:      File handle to read
+        @param data:    Data to write
+        @param ptr:     File pointer to write at, or None to write to current pointer
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:        None if not handled
+                        Tuple of (bytes transferred, new file pointer)
+        """
+        return None
+
+    def get_bytes(self, fh, datalen, ptr, regs, memory):
+        """
+        Get bytes from an open file handle.
+
+        @param fh:      File handle to read
+        @param datalen: Length of data to read
+        @param ptr:     File pointer to read from, or None to read from current pointer
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:        None if not handled
+                        Tuple of (data read, new file pointer)
+        """
+        return None
