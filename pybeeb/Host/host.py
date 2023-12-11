@@ -85,7 +85,7 @@ class OSWORDtty(OSWORD):
             # FIXME: Note that the lowest and highest are not honoured by this
             regs.carry = False
             regs.Y = len(result)
-            memory.writeBytes(input_memory, bytearray(result))
+            memory.writeBytes(input_memory, bytearray(result.encode('latin-1')))
 
         except EOFError:
             raise InputEOFError("EOF received from terminal")
@@ -106,7 +106,10 @@ class OSWORDtty(OSWORD):
             self.console.terminal_reset()
 
         try:
-            result = raw_input()
+            if sys.version_info.major == 2:
+                result = raw_input()
+            else:
+                result = input()
         finally:
             if console_active:
                 self.console.terminal_init()

@@ -195,7 +195,9 @@ class Memory(object):
 
     def readSignedByte(self, address):
         b = self.readByte(address)
-        return unpack("b", chr(b))[0]
+        if b >= 0x80:
+            b -= 0x100;
+        return b
 
     def readWord(self, address):
         return self.readByte(address) + (self.readByte(address + 1) << 8)

@@ -1,4 +1,4 @@
-import ROM
+from . import ROM
 
 BASE = 0xc000
 TOP = 0xffff

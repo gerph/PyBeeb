@@ -8,7 +8,11 @@ RISC OS implementation is present - it needs more work to make that happen.
 
 import errno
 import os
-import Queue
+try:
+    import Queue
+    queue = Queue
+except ImportError:
+    import queue
 import sys
 import threading
 import time
@@ -109,72 +113,72 @@ try:
         #   [24;1~ => [24~
         escape_codes = {
                 # Standard sequences
-                '[A': '\x8F', # Up
-                '[B': '\x8E', # Down
-                '[C': '\x8D', # Right
-                '[D': '\x8C', # Left
-                '[F': '\x8B', # End (Copy in RISC OS terms)
-                '[H': '\x1E', # Home
-                '[Z': '\x09', # Shift-Tab
+                b'[A': b'\x8F', # Up
+                b'[B': b'\x8E', # Down
+                b'[C': b'\x8D', # Right
+                b'[D': b'\x8C', # Left
+                b'[F': b'\x8B', # End (Copy in RISC OS terms)
+                b'[H': b'\x1E', # Home
+                b'[Z': b'\x09', # Shift-Tab
 
                 # Application sequences
-                'OP': '\x81', # F1
-                'OQ': '\x82', # F2
-                'OR': '\x83', # F3
-                'OS': '\x84', # F4
-                'OH': '\x1E', # Home
-                'OF': '\x8B', # End
+                b'OP': b'\x81', # F1
+                b'OQ': b'\x82', # F2
+                b'OR': b'\x83', # F3
+                b'OS': b'\x84', # F4
+                b'OH': b'\x1E', # Home
+                b'OF': b'\x8B', # End
 
                 # VT sequences
-                '[1~': '\x1E', # Home (don't know what this should be)
-                #'[2~': '\x89', # Insert (don't know what this should be)
-                '[3~': '\x7F', # Delete
-                '[4~': '\x8B', # End
-                '[5~': '\x9F', # Page Up
-                '[6~': '\x9E', # Page Down
-                '[7~': '\x1E', # Home
-                '[8~': '\x87', # End
-                '[11~': '\x81', # F1
-                '[12~': '\x82', # F2
-                '[13~': '\x83', # F3
-                '[14~': '\x84', # F4
-                '[15~': '\x85', # F5
+                b'[1~': b'\x1E', # Home (don't know what this should be)
+                #b'[2~': b'\x89', # Insert (don't know what this should be)
+                b'[3~': b'\x7F', # Delete
+                b'[4~': b'\x8B', # End
+                b'[5~': b'\x9F', # Page Up
+                b'[6~': b'\x9E', # Page Down
+                b'[7~': b'\x1E', # Home
+                b'[8~': b'\x87', # End
+                b'[11~': b'\x81', # F1
+                b'[12~': b'\x82', # F2
+                b'[13~': b'\x83', # F3
+                b'[14~': b'\x84', # F4
+                b'[15~': b'\x85', # F5
                 # Note 16 isn't mapped
-                '[17~': '\x86', # F6
-                '[18~': '\x87', # F7
-                '[19~': '\x88', # F8
-                '[20~': '\x89', # F9
-                '[21~': '\xCA', # F10
+                b'[17~': b'\x86', # F6
+                b'[18~': b'\x87', # F7
+                b'[19~': b'\x88', # F8
+                b'[20~': b'\x89', # F9
+                b'[21~': b'\xCA', # F10
                 # Note 22 isn't mapped
-                '[23~': '\xCB', # F11
-                '[24~': '\xCC', # F12
+                b'[23~': b'\xCB', # F11
+                b'[24~': b'\xCC', # F12
 
-                '[25~': '\x80', # Print (don't know what this should be)
+                b'[25~': b'\x80', # Print (don't know what this should be)
 
                 # Shifted keys
-                '[1;2P': '\x91', # Shift-F1
-                '[1;2Q': '\x92', # Shift-F2
-                '[1;2R': '\x93', # Shift-F3
-                '[1;2S': '\x94', # Shift-F4
-                '[15;2~': '\x95', # Shift-F5
-                '[17;2~': '\x96', # Shift-F6
-                '[18;2~': '\x97', # Shift-F7
-                '[19;2~': '\x98', # Shift-F8
-                '[20;2~': '\x99', # Shift-F9
-                '[21;2~': '\xDA', # Shift-F10
-                '[23;2~': '\xDB', # Shift-F11
-                '[24;2~': '\xDC', # Shift-F12
+                b'[1;2P': b'\x91', # Shift-F1
+                b'[1;2Q': b'\x92', # Shift-F2
+                b'[1;2R': b'\x93', # Shift-F3
+                b'[1;2S': b'\x94', # Shift-F4
+                b'[15;2~': b'\x95', # Shift-F5
+                b'[17;2~': b'\x96', # Shift-F6
+                b'[18;2~': b'\x97', # Shift-F7
+                b'[19;2~': b'\x98', # Shift-F8
+                b'[20;2~': b'\x99', # Shift-F9
+                b'[21;2~': b'\xDA', # Shift-F10
+                b'[23;2~': b'\xDB', # Shift-F11
+                b'[24;2~': b'\xDC', # Shift-F12
 
-                '[1;2A': '\x9F', # Shift-Up
-                '[1;2B': '\x9E', # Shift-Down
-                '[1;2C': '\x9D', # Shift-Right
-                '[1;2D': '\x9C', # Shift-Left
-                '[1;2F': '\x9B', # Shift-End (Copy in RISC OS terms)
-                '[1;2H': '\x1E', # Shift-Home
+                b'[1;2A': b'\x9F', # Shift-Up
+                b'[1;2B': b'\x9E', # Shift-Down
+                b'[1;2C': b'\x9D', # Shift-Right
+                b'[1;2D': b'\x9C', # Shift-Left
+                b'[1;2F': b'\x9B', # Shift-End (Copy in RISC OS terms)
+                b'[1;2H': b'\x1E', # Shift-Home
 
                 # Ctrled keys
-                '[1;5H': '\x1E', # Ctrl-Home
-                '[1;5F': '\xAB', # Ctrl-End (Copy in RISC OS terms)
+                b'[1;5H': b'\x1E', # Ctrl-Home
+                b'[1;5F': b'\xAB', # Ctrl-End (Copy in RISC OS terms)
             }
 
         def __init__(self):
@@ -231,8 +235,8 @@ try:
                     new_settings[3] = new_settings[3] | termios.ISIG
 
                     # Allow a single byte to be read
-                    new_settings[6][termios.VMIN] = '\x01'
-                    new_settings[6][termios.VTIME] = '\x00'
+                    new_settings[6][termios.VMIN] = b'\x01'
+                    new_settings[6][termios.VTIME] = b'\x00'
 
                     termios.tcsetattr(self.fd, termios.TCSANOW, new_settings)
                 except termios.error as exc:
@@ -257,7 +261,7 @@ try:
             """
             Parse from a UTF-8 sequence into a sequence that we can insert literally.
             """
-            seq = ''.join(seq)
+            seq = b''.join(seq)
             # Decode the sequence from UTF-8
             decoded = seq.decode('utf-8', 'replace')
             if self.debug_inpututf8:
@@ -266,36 +270,36 @@ try:
             # Encode the sequence into the current alphabet
             rostr = self.encode(decoded)
             if len(rostr) == 1:
-                return ('\x00', rostr)
+                return (b'\x00', rostr)
             else:
                 acc = []
                 for c in rostr:
-                    acc.extend(('\x00', c))
+                    acc.extend((b'\x00', c))
                 return acc
 
         def parse_escape(self, seq):
-            if len(seq) == 0 or (len(seq) == 1 and seq[0] == '\x1b'):
+            if len(seq) == 0 or (len(seq) == 1 and seq[0] == b'\x1b'):
                 # Literal escape key!
                 # FIXME: Should we set the escape flags here too?
-                return '\x1b'
+                return b'\x1b'
 
-            if seq[0] == '[':
+            if seq[0] == b'[':
                 code = seq[-1]
-                if (code >= 'A' and code <= 'Z') or (code >= 'a' and code <= 'z'):
+                if (code >= b'A' and code <= b'Z') or (code >= b'a' and code <= b'z'):
                     # letter codes might have numbers preceding them for modifiers.
                     # a modifier of 1 means 'no modifier', so we can strip it
-                    if len(seq) == 3 and seq[1] == '1':
+                    if len(seq) == 3 and seq[1] == b'1':
                         # Reduce it to the un-modifier version so our dictionary is simpler
-                        seq = ['[', code]
-                elif code == '~':
+                        seq = [b'[', code]
+                elif code == b'~':
                     # The [<num>;<modifier>~ sequence can also have a modifier of 1,
                     # so we simplify this as well.
-                    if len(seq) > 3 and seq[-3] == ';' and seq[-2] == '1':
+                    if len(seq) > 3 and seq[-3] == b';' and seq[-2] == b'1':
                         seq = seq[:-3]
-                        seq.append('~')
+                        seq.append(b'~')
                 # FIXME: The modifier might be +1 for Shift, +2 for Alt, +4 for Ctrl
 
-            seq = ''.join(seq)
+            seq = b''.join(seq)
             value = self.escape_codes.get(seq, None)
             if self.debug_inputescapes:
                 if value:
@@ -317,23 +321,23 @@ try:
             if not self.in_escape and not self.in_utf8:
                 now = time.time()
                 ch = self.int_getch(timeout=timeout)
-                if ch == '\x7F':
-                    ch = chr(self.config.input_backspace_code)
-                if ch == '\x1b' and self.config.input_escapes:
+                if ch == b'\x7F':
+                    ch = bytes(bytearray([self.config.input_backspace_code]))
+                if ch == b'\x1b' and self.config.input_escapes:
                     # This is an escape character, so we're starting a sequence
                     self.in_escape = time.time()
                     self.in_escape_sequence = []
                     # Work out how much more time we have left until the user's request times out
                     if timeout is not None:
                         timeout -= time.time() - now
-                elif ch >= '\x80' and self.config.input_utf8:
+                elif ch >= b'\x80' and self.config.input_utf8:
                     # Likely to be the start of a UTF-8 sequence.
-                    if ch >= '\xc0' and ch <= '\xf7':
+                    if ch >= b'\xc0' and ch <= b'\xf7':
                         # Is a UTF-8 sequence start
                         self.in_utf8_sequence = [ch]
-                        if ch >= '\xf0':
+                        if ch >= b'\xf0':
                             self.in_utf8 = 4
-                        elif ch >= '\xe0':
+                        elif ch >= b'\xe0':
                             self.in_utf8 = 3
                         else:
                             self.in_utf8 = 2
@@ -349,7 +353,11 @@ try:
                 # We know we're in an escape sequence, and we have timeout seconds left.
                 while (timeout is None or timeout > 0) and self.in_escape:
                     now = time.time()
-                    ch = self.int_getch(timeout=timeout if timeout > self.config.input_escapes_timeout else self.config.input_escapes_timeout)
+                    if timeout and timeout > self.config.input_escapes_timeout:
+                        escape_timeout = timeout
+                    else:
+                        escape_timeout = self.config.input_escapes_timeout
+                    ch = self.int_getch(timeout=escape_timeout)
                     if ch is None:
                         break
                     # Escapes end with a ~, A-Z, a-z (or a timeout)
@@ -357,18 +365,18 @@ try:
                     self.in_escape_sequence.append(ch)
                     # In 'application ' mode, some sequences are sent as SS3 followed by a sequence
                     # SS3 => <esc>O followed by any character.
-                    if self.in_escape_sequence[0] == 'O':
+                    if self.in_escape_sequence[0] == b'O':
                         if len(self.in_escape_sequence) == 2:
                             # SS3 only applies to the next character.
                             self.in_escape = False
                             break
                     else:
-                        if (ch >= 'A' and ch <= 'Z') or (ch >= 'a' and ch <= 'z') or ch == '~':
+                        if (ch >= b'A' and ch <= b'Z') or (ch >= b'a' and ch <= b'z') or ch == b'~':
                             # This is the end of a sequence
                             self.in_escape = False
                             break
 
-                        if len(self.in_escape_sequence) == 1 and ch != '[':
+                        if len(self.in_escape_sequence) == 1 and ch != b'[':
                             # This is an <esc><char> sequence
                             self.in_escape = False
                             break
@@ -392,16 +400,16 @@ try:
                     ch = self.int_getch(timeout=timeout)
                     if ch is None:
                         return None
-                    if ch < '\x80' or ch >= '\xc0':
+                    if ch < b'\x80' or ch >= b'\xc0':
                         # This is not a character that should be in the UTF-8 sequence - it's
                         # broken UTF-8.
                         if self.debug_inpututf8:
                             print("Input UTF-8: Invalid sequence %r + %r" % (self.in_utf8_sequence, ch))
 
                         # FIXME: Configurable way to handle this?
-                        acc = ''.join(self.in_utf8_sequence)
+                        acc = b''.join(self.in_utf8_sequence)
                         # FIXME: Discard the characters if wanted, or encode?
-                        if ch < '\x80':
+                        if ch < b'\x80':
                             # The excess is a plain character
                             # FIXME: Note that this doesn't handle the excess character being
                             #        an escape (!)
@@ -412,9 +420,9 @@ try:
                             # The excess is the start of another UTF-8 sequence, so we
                             # start another sequence
                             self.in_utf8_sequence = [ch]
-                            if ch >= '\xf0':
+                            if ch >= b'\xf0':
                                 self.in_utf8 = 4
-                            elif ch >= '\xe0':
+                            elif ch >= b'\xe0':
                                 self.in_utf8 = 3
                             else:
                                 self.in_utf8 = 2
@@ -446,7 +454,7 @@ try:
             if not input_pending:
                 # And check for new bytes (within the timeout)
                 try:
-                    r, w, x = select.select([sys.stdin], [], [], timeout)
+                    r, w, x = select.select([self.fd], [], [], timeout)
                     if r:
                         input_pending = True
                 except select.error as exc:
@@ -463,7 +471,7 @@ try:
                 before = time.time()
                 if self.is_pending(timeout):
                     if self.is_tty:
-                        # Ensures that we avoid Pythons greedy read in the sys.stdin file handle
+                        # Ensures that we avoid Python's greedy read in the sys.stdin file handle
                         # which would otherwise consume more characters, preventing the select
                         # from being aware that the characters are present.
                         try:
@@ -475,7 +483,7 @@ try:
                             ch = None
                     else:
                         ch = sys.stdin.read(1)
-                    if ch == '':
+                    if ch == b'':
                         if not self.handle_eof() and timeout is not None:
                             # We didn't do anything, but the handle reported EOF.
                             # We're just going to wait for the timeout period, because otherwise
@@ -504,7 +512,6 @@ try:
                             raise
                         ch = None
                 else:
-                    print(repr(sys.stdin.buffer))
                     ch = sys.stdin.read(1)
 
             return ch
@@ -552,7 +559,7 @@ except ImportError:
                 self.thread = None
                 self.alive = True
                 self.want_key = threading.Event()
-                self.input_queue = Queue.Queue()
+                self.input_queue = queue.Queue()
 
         def finalise(self):
             if self.thread:

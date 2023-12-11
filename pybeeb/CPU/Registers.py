@@ -60,13 +60,13 @@ class RegisterBank(object):
         self.setPS(0)
 
     def status(self):
-        print "%s%s.%s%s%s%s%s" % (
-                                   "N" if self.negative else "-",
-                                   "V" if self.overflow else "-",
-                                   "B" if self.brk else "-",
-                                   "D" if self.dec else "-",
-                                   "I" if self.int else "-",
-                                   "Z" if self.zero else "-",
-                                   "C" if self.carry else "-"),
-        print "A: %s X: %s Y: %s" % (hex(self.a), hex(self.x), hex(self.y)),
-        print "PC: %s SP: %s" % (hex(self.pc), hex(self.sp))
+        sys.stdout.write("%s%s.%s%s%s%s%s" % (
+                                              "N" if self.negative else "-",
+                                              "V" if self.overflow else "-",
+                                              "B" if self.brk else "-",
+                                              "D" if self.dec else "-",
+                                              "I" if self.int else "-",
+                                              "Z" if self.zero else "-",
+                                              "C" if self.carry else "-"))
+        sys.stdout.write("A: %s X: %s Y: %s" % (hex(self.a), hex(self.x), hex(self.y)))
+        sys.stdout.write("PC: %s SP: %s\n" % (hex(self.pc), hex(self.sp)))

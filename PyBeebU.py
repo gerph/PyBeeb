@@ -36,7 +36,7 @@ class BBC(object):
 class OSCLIquit(OSCLI):
 
     def command(self, command, args):
-        if command == 'QUIT':
+        if command == b'QUIT':
             sys.exit()
         return False
 
@@ -104,7 +104,7 @@ def main():
                         pb.reg.pc = pb.dispatch.pullWord() + 1
                 except BBCError as exc:
                     pb.memory.writeBytes(0x100, bytearray([0, exc.errnum]))
-                    pb.memory.writeBytes(0x100 + 2, bytearray(exc.errmess))
+                    pb.memory.writeBytes(0x100 + 2, bytearray(exc.errmess.encode('latin-1')))
                     pb.reg.pc = 0x100
 
             syscalls[interface.code] = hook

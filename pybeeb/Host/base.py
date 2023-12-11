@@ -206,13 +206,13 @@ class OSCLI(OSInterface):
     def call(self, regs, memory):
         xy = regs.x | (regs.y << 8)
         cli = memory.readString(xy)
-        while cli[0] == '*':
+        while cli[0:1] == b'*':
             cli = cli[1:]
-        if ' ' in cli:
-            (command, args) = cli.split(' ', 1)
+        if b' ' in cli:
+            (command, args) = cli.split(b' ', 1)
         else:
             command = cli
-            args = ''
+            args = b''
 
         return self.command(command.upper(), args)
 
