@@ -495,7 +495,17 @@ try:
                         ch = None
 
             else:
-                ch = sys.stdin.read(1)
+                if self.fd is not None:
+                    try:
+                        ch = os.read(self.fd, 1)
+                    except OSError as exc:
+                        # Interrupted system call happens in cases like ctrl-z being pressed.
+                        if exc.errno != errno.EINTR:
+                            raise
+                        ch = None
+                else:
+                    print(repr(sys.stdin.buffer))
+                    ch = sys.stdin.read(1)
 
             return ch
 
