@@ -759,6 +759,10 @@ class OSGBPB(OSInterface):
         self.dispatch[0x02] = self.call_put_bytes
         self.dispatch[0x03] = self.call_get_bytes
         self.dispatch[0x04] = self.call_get_bytes
+        self.dispatch[0x05] = self.call_get_media_title
+        self.dispatch[0x06] = lambda op, address, regs, memory: self.call_get_csd_lib(op, address, regs, memory, csd=True)
+        self.dispatch[0x07] = lambda op, address, regs, memory: self.call_get_csd_lib(op, address, regs, memory, csd=False)
+        self.dispatch[0x08] = self.call_get_filenames
         self.dispatch_default = self.osgbpb
 
     def dispatch_parameters(self, regs, memory):
@@ -854,6 +858,83 @@ class OSGBPB(OSInterface):
             handled = False
         return handled
 
+    def call_get_media_title(self, op, address, regs, memory):
+        """
+        Get media title and option as <len><title><option>
+        """
+        dataaddr = memory.readLongWord(address + 1)
+        datalen = memory.readLongWord(address + 5)
+        result = self.get_media_title(regs, memory)
+        if result:
+            (title, option) = result
+            transferred = 1 + len(title) + 1
+            if transferred != datalen:
+                regs.carry = True
+                memory.writeLongWord(address + 5, datalen - transferred)
+            else:
+                regs.carry = False
+            data = bytearray([len(title)]) + bytearray(title) + bytearray(option)
+            memory.writeLongWord(address + 1, dataaddr + transferred)
+            memory.writeLongWord(address + 9, transferred)
+            memory.writeBytes(dataaddr, data)
+            handled = True
+        else:
+            handled = False
+        return handled
+
+    def call_get_csd_lib(self, op, address, regs, memory, csd):
+        """
+        Get CSD/library and device as <len><device><len><csd>
+        """
+        dataaddr = memory.readLongWord(address + 1)
+        datalen = memory.readLongWord(address + 5)
+        if csd:
+            result = self.get_csd(regs, memory)
+        else:
+            result = self.get_lib(regs, memory)
+        if result:
+            (device, csd) = result
+            transferred = 1 + len(device) + 1 + len(csd)
+            if transferred != datalen:
+                regs.carry = True
+                memory.writeLongWord(address + 5, datalen - transferred)
+            else:
+                regs.carry = False
+            data = bytearray([len(device)]) + bytearray(device) + bytearray([len(csd)]) + bytearray(csd)
+            memory.writeLongWord(address + 1, dataaddr + transferred)
+            memory.writeLongWord(address + 9, transferred)
+            memory.writeBytes(dataaddr, data)
+            handled = True
+        else:
+            handled = False
+        return handled
+
+    def call_get_filenames(self, op, address, regs, memory, csd):
+        """
+        Get filenames from the CSD, in form <length><filename>...
+        """
+        dataaddr = memory.readLongWord(address + 1)
+        nfiles = memory.readLongWord(address + 5)
+        offset = memory.readLongWord(address + 9)
+        filenames = self.get_csd_filenames(offset, nfiles, regs, memory)
+        if filenames is not None:
+            transferred = len(filenames)
+            if transferred != nfiles:
+                regs.carry = True
+                memory.writeLongWord(address + 5, nfiles - transferred)
+            else:
+                regs.carry = False
+            for filename in filenames:
+                data = bytearray([len(filename)]) + bytearray(filename)
+                memory.writeBytes(dataaddr, data)
+                dataaddr += len(data)
+            memory.writeLongWord(address + 1, dataaddr)
+            memory.writeLongWord(address + 9, offset + transferred)
+            handled = True
+        else:
+            handled = False
+        return handled
+
     def put_bytes(self, fh, data, ptr, regs, memory):
         """
         Put bytes to an open file handle.
@@ -881,5 +962,55 @@ class OSGBPB(OSInterface):
 
         @return:        None if not handled
                         Tuple of (data read, new file pointer)
+        """
+        return None
+
+    def get_media_title(self, regs, memory):
+        """
+        Get the media title and boot option
+
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:        None if not handled
+                        Tuple of (media title, boot option value)
+        """
+        return None
+
+    def get_csd(self, regs, memory):
+        """
+        Get the device name (eg "0" for disc 0) and CSD
+
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:        None if not handled
+                        Tuple of (device name, CSD)
+        """
+        return None
+
+    def get_lib(self, regs, memory):
+        """
+        Get the device name (eg "0" for disc 0) and library
+
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:        None if not handled
+                        Tuple of (device name, library directory)
+        """
+        return None
+
+    def get_csd_filenames(self, nfiles, offset, regs, memory):
+        """
+        Get filenames from the CSD.
+
+        @param nfiles:  Maximum number of files to read
+        @param offset:  Offset in directory list to start from
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:        None if not handled
+                        List of filenames if handled
         """
         return None
