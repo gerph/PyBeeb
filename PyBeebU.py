@@ -10,7 +10,7 @@ import sys
 
 from pybeeb.PyBeebicorn import Pb, PbError, PbConstants
 from pybeeb.Host import (BBCError, InputEOFError, OSInterface,
-                         OSCLI, OSBYTE, OSFILE, OSFIND, OSARGS, OSBPUT, OSBGET, OSGBPB)
+                         OSCLI, OSBYTE, OSFILE, OSFIND, OSARGS, OSBPUT, OSBGET, OSGBPB, OSFSC)
 from pybeeb.Host.host import OSWRCHtty, OSRDCHtty, OSWORDtty
 
 
@@ -89,6 +89,7 @@ def main():
             OSBPUT,
             OSBGET,
             OSGBPB,
+            OSFSC
         )
     try:
         syscalls = {}

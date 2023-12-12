@@ -67,6 +67,7 @@ __all__ = (
         'OSBPUT',
         'OSBGET',
         'OSGBPB',
+        'OSFSC',
     )
 
 
@@ -767,7 +768,7 @@ class OSGBPB(OSInterface):
 
     def dispatch_parameters(self, regs, memory):
         """
-        Decode the paramters for the address.
+        Decode the parameters for the address.
         """
         address = regs.x | (regs.y << 8)
         return [regs.a, address, regs, memory]
@@ -1014,3 +1015,233 @@ class OSGBPB(OSInterface):
                         List of filenames if handled
         """
         return None
+
+
+class OSFSC(OSInterface):
+    code = 0xFFB1
+    vector = 0x021E
+
+    def __init__(self):
+        super(OSFSC, self).__init__()
+        self.dispatch[0x00] = self.call_opt
+        self.dispatch[0x01] = self.call_eof
+        self.dispatch[0x02] = self.call_slash
+        self.dispatch[0x03] = self.call_ukcommand
+        self.dispatch[0x04] = self.call_run
+        self.dispatch[0x05] = self.call_cat
+        self.dispatch[0x06] = self.call_fs_starting
+        self.dispatch[0x07] = self.call_get_handle_range
+        self.dispatch[0x08] = self.call_star_command
+        self.dispatch_default = self.osfsc
+
+    def dispatch_parameters(self, regs, memory):
+        """
+        Decode the parameters for the address.
+        """
+        address = regs.x | (regs.y << 8)
+        return [regs.a, address, regs, memory]
+
+    def osfsc(self, op, address, regs, memory):
+        """
+        Operation codes:
+
+        00 *OPT X, Y issued
+        01 EOF checked on file handle X
+        02 */<command> issued
+        03 Unrecognised command issued
+        04 *RUN <filename> issued
+        05 *CAT <directory> issued
+        06 New FS starting
+        07 Get file handles range in X(low) and Y(high)
+        08 *command has been issued
+        """
+        return False
+
+    def call_opt(self, op, address, regs, memory):
+        """
+        *OPT X, Y issued
+        """
+        handled = self.opt(regs.x, regs.y, regs, memory)
+        return handled
+
+    def call_eof(self, op, address, regs, memory):
+        """
+        EOF check on a file handle.
+        """
+        fh = regs.x
+        eof = self.eof(fh, regs, memory)
+        if eof is None:
+            return False
+        regs.x = 0xFF if eof else 0x00
+        return True
+
+    def call_slash(self, op, address, regs, memory):
+        """
+        A /<command> has been issued
+        """
+        cli = memory.readString(address)
+        # FIXME: Should we split this up?
+        handled = self.slash(cli, regs, memory)
+        return handled
+
+    def call_ukcommand(self, op, address, regs, memory):
+        """
+        An unknown command has been issued
+        """
+        cli = memory.readString(address)
+        # FIXME: Should we split this up?
+        handled = self.ukcommand(cli, regs, memory)
+        return handled
+
+    def call_run(self, op, address, regs, memory):
+        """
+        *Run has been issued
+        """
+        cli = memory.readString(address)
+        # FIXME: Should we split this up?
+        handled = self.run(cli, regs, memory)
+        return handled
+
+    def call_cat(self, op, address, regs, memory):
+        """
+        *Cat has been issued
+        """
+        cat = memory.readString(address)
+        handled = self.cat(cat, regs, memory)
+        return handled
+
+    def call_fs_starting(self, op, address, regs, memory):
+        """
+        A new FS is starting up
+        """
+        handled = self.fs_starting(regs, memory)
+        return handled
+
+    def call_get_handle_range(self, op, address, regs, memory):
+        """
+        Read the range of file handles supported.
+        """
+        result = self.get_handle_range(regs, memory)
+        if result is None:
+            return False
+        (regs.x, regs.y) = result
+        return True
+
+    def call_star_command(self, op, address, regs, memory):
+        """
+        New *command issued (for handling *Enable)
+        """
+        handled = self.star_command(regs, memory)
+        return handled
+
+    def opt(self, x, y, regs, memory):
+        """
+        *OPT X, Y issued
+
+        @param x, y:        Parameters to *Opt
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        True if handled,
+                        False if not handled
+        """
+        return False
+
+    def eof(self, fh, regs, memory):
+        """
+        EOF#fh check
+
+        @param fh:
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        True if EOF,
+                        False if not EOF,
+                        None if not handled
+        """
+        return False
+
+    def slash(self, cli, regs, memory):
+        """
+        */<command> issued.
+
+        @param cli:         CLI to execute
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        True if handled,
+                        False if not handled
+        """
+        return False
+
+    def ukcommand(self, cli, regs, memory):
+        """
+        Unknown command issued
+
+        @param cli:         Command issued
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        True if handled,
+                        False if not handled
+        """
+        return False
+
+    def run(self, run, regs, memory):
+        """
+        *Run issued.
+
+        @param run:         Command to run
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        True if handled,
+                        False if not handled
+        """
+        return False
+
+    def cat(self, dir, regs, memory):
+        """
+        *Cat issued
+
+        @param dir:         Directory name
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        True if handled,
+                        False if not handled
+        """
+        return False
+
+    def fs_starting(self, regs, memory):
+        """
+        New FS is starting.
+
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        True if handled,
+                        False if not handled
+        """
+        return False
+
+    def get_handle_range(self, regs, memory):
+        """
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        None if not handled
+                        Tuple of (low handle, high handle) if handled
+        """
+        return False
+
+    def star_command(self, regs, memory):
+        """
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        True if handled,
+                        False if not handled
+        """
+        return False
+
