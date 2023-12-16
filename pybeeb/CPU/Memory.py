@@ -208,7 +208,7 @@ class Memory(object):
 
     def writeLongWord(self, address, value):
         parts = bytearray([value & 255, (value>>8) & 255, (value>>16) & 255, (value>>24) & 255])
-        self.writeBytes(address, value)
+        self.writeBytes(address, parts)
 
     def readString(self, address):
         s = []

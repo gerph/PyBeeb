@@ -375,9 +375,9 @@ class OSFILE(OSInterface):
         elif op == 255:
             # Load
             if memory.readByte(address + 6) == 0:
-                load_address = None
-            else:
                 load_address = memory.readLongWord(address + 2)
+            else:
+                load_address = None
             result = self.load(filename, load_address, regs, memory)
             if result:
                 handled = True

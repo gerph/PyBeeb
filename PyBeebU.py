@@ -12,6 +12,7 @@ from pybeeb.PyBeebicorn import Pb, PbError, PbConstants
 from pybeeb.Host import (BBCError, InputEOFError, OSInterface,
                          OSCLI, OSBYTE, OSFILE, OSFIND, OSARGS, OSBPUT, OSBGET, OSGBPB, OSFSC)
 from pybeeb.Host.host import OSWRCHtty, OSRDCHtty, OSWORDtty
+from pybeeb.Host.hostfs import host_fs_interfaces
 
 
 class BBC(object):
@@ -77,20 +78,20 @@ def main():
     # Report memory reads and writes anywhere between the PAGE and HIMEM (video memory).
     #bbc.pb.hook_add(PbConstants.PB_HOOK_MEM_READ | PbConstants.PB_HOOK_MEM_WRITE, mem_hook, begin=0xe00, end=0x7c00)
 
-    interface_classes = (
+    interface_classes = [
             OSWRCHtty,
             OSRDCHtty,
             OSCLIquit,
             OSBYTEversion,
             OSWORDtty,
-            OSFILE,
-            OSFIND,
-            OSARGS,
-            OSBPUT,
-            OSBGET,
-            OSGBPB,
-            OSFSC
-        )
+            #OSFILE,
+            #OSFIND,
+            #OSARGS,
+            #OSBPUT,
+            #OSBGET,
+            #OSGBPB,
+            #OSFSC
+        ] + host_fs_interfaces('.')
     try:
         syscalls = {}
         interfaces = []
