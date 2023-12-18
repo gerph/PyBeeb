@@ -258,6 +258,7 @@ class OpenFile(object):
         self.how = how & open_mask
         self.openhow = self.howmap[self.how]
 
+        #print("OpenFile(dirent=%r, how=%r): openhow=%r" % (dirent, how, self.openhow))
         self.fh = open(dirent.fullpath_native, self.openhow)
 
     def __repr__(self):
@@ -388,6 +389,7 @@ class FS(object):
             if not ext:
                 ext = self.loadexec_to_extension.get((None, execaddr), None)
         if ext:
+            #print("ext name : %s / %s" % (new_name, ext))
             new_name = "%s%s" % (new_name, ext)
         else:
             # Load and exec address are required, so we need to put the long extension on
@@ -510,8 +512,10 @@ class FS(object):
             dirent = dir[leafname]
         except BBCFileNotFoundError:
             # If the file isn't there, we need to create one.
+            #print("Try to create new file for %r : %r / %r" % (path, dirname, leafname))
             native_leafname = self.generate_native_filename(leafname, loadaddr, execaddr, 1)
             native_path = os.path.join(dir.fullpath_native, native_leafname)
+            #print("Native name = %r" % (native_path,))
             # Create the file
             with open(native_path, 'w') as fh:
                 pass
@@ -558,12 +562,15 @@ class FS(object):
         try:
             dirent = self.find(filename)
         except BBCFileNotFoundError as exc:
+            #print("Not found (%s), how=%r" % (filename, how))
             if (how & open_mask) == open_in:
                 # Reading the file, so the file has to exist.
                 raise
 
             # Writing, or updating, so we want to create the file first
+            #print("  ensure exists")
             self.ensure_exists(filename, self.open_loadaddr, self.open_execaddr)
+            dirent = self.find(filename)
 
         bfh = OpenFile(self, dirent, how)
         self.allocate_filehandle(bfh)

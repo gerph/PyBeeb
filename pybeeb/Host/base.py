@@ -716,8 +716,7 @@ class OSFIND(OSInterface):
         return self.close(fh=y, regs=regs, memory=memory)
 
     def call_open(self, a, x, y, regs, memory):
-        address = x | (y << 8)
-        filename_ptr = memory.readWord(address)
+        filename_ptr = x | (y << 8)
         filename = memory.readString(filename_ptr)
         fh = self.open(a, filename, regs, memory)
         if fh is None:
