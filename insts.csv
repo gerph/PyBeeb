@@ -112,7 +112,7 @@ hex,instr,addr,wb,len,tim
 6E,ROR,abs,M,3,6
 6F,,,,,
 70,BVS,rel,PC,2,2
-71,ADC,imy,A,2,5
+71,ADC,iny,A,2,5
 72,,,,,
 73,,,,,
 74,,,,,
