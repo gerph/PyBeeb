@@ -209,7 +209,12 @@ class Directory(object):
     def __init__(self, fs, name, parent):
         self.fs = fs
         self.name = name
-        self.fullpath = self.fs.join(parent, name)
+        #print("Creating directory %s, parent %r" % (name, parent))
+        if parent:
+            self.fullpath = self.fs.join(parent.fullpath, name)
+        else:
+            self.fullpath = self.fs.join("$", name)
+
         if parent:
             self.fullpath_native = os.path.join(parent.fullpath_native, name)
         else:
@@ -222,7 +227,7 @@ class Directory(object):
             filenames = os.listdir(self.fullpath_native)
 
             files = {}
-            #print("Files in %r" % (self.fullpath,))
+            #print("Files in %r (%r)" % (self.fullpath, self.fullpath_native))
             for filename in filenames:
                 dirent = DirectoryEntry(fs=self.fs, native_name=filename, parent=self)
                 files[dirent.name.lower()] = dirent
@@ -287,7 +292,10 @@ class OpenFile(object):
     def write(self, data):
         self.fh.write(data)
 
-    def eof(self, handle):
+    def flush(self):
+        self.fh.flush()
+
+    def eof(self):
         ptr = self.ptr()
         self.fh.seek(ptr, os.SEEK_END)
         ext = self.ptr()
@@ -446,7 +454,7 @@ class FS(object):
         if dir is None:
             (dirname, leafname) = self.splitname(path)
             #print("  dirname=%s leafname=%s" % (dirname, leafname))
-            if dirname != '$':
+            if leafname != '$':
                 parent = self.dir(dirname)
                 dir = Directory(self, leafname, parent)
             else:
@@ -585,7 +593,7 @@ class FS(object):
         bfh.close()
         self.release_filehandle(handle)
 
-    def ptr_seek(self, handle, ptr):
+    def ptr_write(self, handle, ptr):
         bfh = self.find_handle(handle)
         return bfh.ptr(ptr)
 
@@ -596,6 +604,10 @@ class FS(object):
     def ext_read(self, handle):
         bfh = self.find_handle(handle)
         return bfh.ext()
+
+    def flush(self, handle):
+        bfh = self.find_handle(handle)
+        bfh.flush()
 
     def read(self, handle, size):
         bfh = self.find_handle(handle)

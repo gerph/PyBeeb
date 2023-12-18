@@ -2,7 +2,7 @@
 Implementations of the OS interfaces which communicate with the host (file system specific)
 """
 
-from .base import OSInterface, OSFILE, OSFIND, OSBGET, OSBPUT, BBCError
+from .base import OSInterface, OSFILE, OSFIND, OSBGET, OSBPUT, OSARGS, BBCError
 from .fsbbc import FS, BBCFileNotFoundError, open_in, open_out
 
 
@@ -197,7 +197,7 @@ class OSBGEThost(OSBGET):
         data = self.fs.read(fh, 1)
         if not data:
             return -1
-        return data[0]
+        return bytearray(data[0])[0]
 
 
 class OSBPUThost(OSBPUT):
@@ -221,6 +221,100 @@ class OSBPUThost(OSBPUT):
         return True
 
 
+class OSARGShost(OSARGS):
+
+    def __init__(self, fs):
+        super(OSARGShost, self).__init__()
+        self.fs = fs
+
+    def read_ptr(self, fh, regs, memory):
+        """
+        Read PTR#.
+
+        @param fh:      File handle to read
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:    PTR for the file, or None if not handled
+        """
+        ptr = self.fs.ptr_read(fh)
+        return ptr
+
+    def read_ext(self, fh, regs, memory):
+        """
+        Read EXT#.
+
+        @param fh:      File handle to read
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:    EXT for the file, or None if not handled
+        """
+        ext = self.fs.ext_read(fh)
+        return ext
+
+    def write_ptr(self, fh, ptr, regs, memory):
+        """
+        Write PTR#.
+
+        @param fh:      File handle to read
+        @param ptr:     New PTR value
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:    True if handled, False if not handled
+        """
+        self.fs.ptr_write(fh, ptr)
+        return True
+
+    def flush_file(self, fh, regs, memory):
+        """
+        Flush file to storage.
+
+        @param fh:      File handle to read
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:    True if handled, False if not handled
+        """
+        self.fs.flush(fh)
+        return True
+
+    def flush_all_files(self, regs, memory):
+        """
+        Flush all files to storage
+
+        @param fh:      File handle to read
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:    True if handled, False if not handled
+        """
+        return False
+
+    def read_current_filesystem(self, regs, memory):
+        """
+        Read the current filesystem.
+
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:    Filesystem number, or None is not handled
+        """
+        return 4    # FS_DFS
+
+    def read_cli_args(self, regs, memory):
+        """
+        Read the CLI arguments.
+
+        @param regs:    Registers object
+        @param memory:  Memory object
+
+        @return:    Address of CLI arguments, or None is not handled
+        """
+        return None
+
+
 def host_fs_interfaces(basedir):
     """
     Construct a list of OS interfaces for filesystems, using a host base directory.
@@ -231,4 +325,5 @@ def host_fs_interfaces(basedir):
             lambda: OSFINDhost(fs),
             lambda: OSBGEThost(fs),
             lambda: OSBPUThost(fs),
+            lambda: OSARGShost(fs),
         ]
