@@ -42,7 +42,8 @@ class OSFILEhost(OSFILE):
 
         @return:    True if the call is handled, or False if it's not handled
         """
-        return False
+        self.fs.set_fileinfo(filename, info_load, info_exec, info_attr)
+        return True
 
     def write_load(self, filename, info_load, regs, memory):
         """
@@ -53,7 +54,9 @@ class OSFILEhost(OSFILE):
 
         @return:    True if the call is handled, or False if it's not handled
         """
-        return False
+        (info_type, _, info_exec, info_length, info_attr) = self.fs.fileinfo(filename)
+        self.fs.set_fileinfo(filename, info_load, info_exec, info_attr)
+        return True
 
     def write_exec(self, filename, info_exec, regs, memory):
         """
@@ -64,7 +67,9 @@ class OSFILEhost(OSFILE):
 
         @return:    True if the call is handled, or False if it's not handled
         """
-        return False
+        (info_type, info_load, _, info_length, info_attr) = self.fs.fileinfo(filename)
+        self.fs.set_fileinfo(filename, info_load, info_exec, info_attr)
+        return True
 
     def write_attr(self, filename, info_attr, regs, memory):
         """
@@ -75,9 +80,11 @@ class OSFILEhost(OSFILE):
 
         @return:    True if the call is handled, or False if it's not handled
         """
-        return False
+        (info_type, info_load, info_exec, info_length, _) = self.fs.fileinfo(filename)
+        self.fs.set_fileinfo(filename, info_load, info_exec, info_attr)
+        return True
 
-    def read_attr(self, filename, regs, memory):
+    def read_info(self, filename, regs, memory):
         """
         @param filename:    File to operate on
         @param info_load:   Load address
@@ -89,7 +96,8 @@ class OSFILEhost(OSFILE):
         @return:    None if not handled,
                     Tuple of (info_type, info_load, info_exec, info_length, info_attr) if handled
         """
-        return None
+        (info_type, info_load, info_exec, info_length, info_attr) = self.fs.fileinfo(filename)
+        return (info_type, info_load, info_exec, info_length, info_attr)
 
     def delete(self, filename, regs, memory):
         """
@@ -99,7 +107,8 @@ class OSFILEhost(OSFILE):
 
         @return:    True if the call is handled, or False if it's not handled
         """
-        return False
+        self.fs.delete(filename)
+        return True
 
     def load(self, filename, load_address, regs, memory):
         """

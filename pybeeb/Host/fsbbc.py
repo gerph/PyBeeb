@@ -547,6 +547,13 @@ class FS(object):
             # FIXME: attributes aren't affected yet
             pass
 
+    def delete(self, filename):
+        dirent = self.find(filename)
+        if dirent.objtype == 1:
+            os.unlink(dirent.fullpath_native)
+        else:
+            os.rmdir(dirent.fullpath_native)
+
     def open(self, filename, how):
         try:
             dirent = self.find(filename)

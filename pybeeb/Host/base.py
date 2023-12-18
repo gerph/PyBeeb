@@ -356,7 +356,7 @@ class OSFILE(OSInterface):
 
         elif op == 5:
             # Read load+exec+attr
-            result = self.read_attr(filename, regs, memory)
+            result = self.read_info(filename, regs, memory)
             if result:
                 handled = True
                 (info_type, info_load, info_exec, info_length, info_attr) = result
@@ -453,7 +453,7 @@ class OSFILE(OSInterface):
         """
         return False
 
-    def read_attr(self, filename, regs, memory):
+    def read_info(self, filename, regs, memory):
         """
         @param filename:    File to operate on
         @param info_load:   Load address
