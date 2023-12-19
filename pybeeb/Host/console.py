@@ -214,47 +214,49 @@ try:
                 return False
 
         def terminal_init(self):
-            if not self.is_dead:
-                self.fd = self.get_fd()
-                self.is_tty = self.get_isatty()
+            if not self.terminal_active:
+                if not self.is_dead:
+                    self.fd = self.get_fd()
+                    self.is_tty = self.get_isatty()
 
-            if self.is_tty:
-                try:
-                    # Preserve old settings
-                    self.old_settings = termios.tcgetattr(self.fd)
+                if self.is_tty:
+                    try:
+                        # Preserve old settings
+                        self.old_settings = termios.tcgetattr(self.fd)
 
-                    # Set up our requirements
-                    tty.setraw(self.fd, termios.TCSANOW)
-                    new_settings = termios.tcgetattr(self.fd)
+                        # Set up our requirements
+                        tty.setraw(self.fd, termios.TCSANOW)
+                        new_settings = termios.tcgetattr(self.fd)
 
-                    # Output post processing (LF => CR, LF mostly) only if requested
-                    if self.cooked_newlines:
-                        new_settings[1] = new_settings[1] | termios.OPOST | termios.ONLCR
+                        # Output post processing (LF => CR, LF mostly) only if requested
+                        if self.cooked_newlines:
+                            new_settings[1] = new_settings[1] | termios.OPOST | termios.ONLCR
 
-                    # Allow interrupt signals
-                    new_settings[3] = new_settings[3] | termios.ISIG
+                        # Allow interrupt signals
+                        new_settings[3] = new_settings[3] | termios.ISIG
 
-                    # Allow a single byte to be read
-                    new_settings[6][termios.VMIN] = b'\x01'
-                    new_settings[6][termios.VTIME] = b'\x00'
+                        # Allow a single byte to be read
+                        new_settings[6][termios.VMIN] = b'\x01'
+                        new_settings[6][termios.VTIME] = b'\x00'
 
-                    termios.tcsetattr(self.fd, termios.TCSANOW, new_settings)
-                except termios.error as exc:
-                    if exc.args[0] == errno.EIO:
-                        self.is_dead = True
-                        self.is_tty = False
-                    else:
-                        raise
-            if not self.cooked_newlines:
-                sys.stdout = self
+                        termios.tcsetattr(self.fd, termios.TCSANOW, new_settings)
+                    except termios.error as exc:
+                        if exc.args[0] == errno.EIO:
+                            self.is_dead = True
+                            self.is_tty = False
+                        else:
+                            raise
+                if not self.cooked_newlines:
+                    sys.stdout = self
 
             super(Console, self).terminal_init()
 
         def terminal_reset(self):
-            if self.is_tty:
-                termios.tcsetattr(self.fd, termios.TCSADRAIN, self.old_settings)
-            if not self.cooked_newlines:
-                sys.stdout = self.original_stdout
+            if self.terminal_active:
+                if self.is_tty:
+                    termios.tcsetattr(self.fd, termios.TCSADRAIN, self.old_settings)
+                if not self.cooked_newlines:
+                    sys.stdout = self.original_stdout
             super(Console, self).terminal_reset()
 
         def parse_utf8(self, seq):

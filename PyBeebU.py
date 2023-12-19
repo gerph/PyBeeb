@@ -11,7 +11,7 @@ import sys
 from pybeeb.PyBeebicorn import Pb, PbError, PbConstants
 from pybeeb.Host import (BBCError, InputEOFError, OSInterface,
                          OSCLI, OSBYTE, OSFILE, OSFIND, OSARGS, OSBPUT, OSBGET, OSGBPB, OSFSC)
-from pybeeb.Host.hosttty import OSWRCHtty, OSRDCHtty, OSWORDtty
+from pybeeb.Host.hosttty import OSWRCHtty, OSRDCHtty, OSWORDtty, OSBYTEtty
 from pybeeb.Host.hostfs import host_fs_interfaces
 
 
@@ -84,6 +84,7 @@ def main():
             OSCLIquit,
             OSBYTEversion,
             OSWORDtty,
+            OSBYTEtty,
             #OSFILE,
             #OSFIND,
             #OSARGS,
@@ -101,7 +102,9 @@ def main():
             interfaces.append(interface)
             def hook(pb, address, size, user_data, interface=interface):
                 try:
+                    #print("Call interface %r" % (interface,))
                     handled = interface.call(pb.reg, pb.memory)
+                    #print("  handled = %r" % (handled,))
                     if handled:
                         pb.reg.pc = pb.dispatch.pullWord() + 1
                 except BBCError as exc:
