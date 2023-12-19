@@ -1,4 +1,9 @@
-# Run our tests
+# Manage operations on the repository.
+
+run: coverage
+
+clean:
+	find . -name '*.pyc' -delete
 
 coverage_clear:
 	./coverage_run.py --clear
