@@ -2,7 +2,7 @@
 Implementations of the OS interfaces which communicate with the host (file system specific)
 """
 
-from .base import OSInterface, OSFILE, OSFIND, OSBGET, OSBPUT, OSARGS, BBCError
+from .base import OSInterface, OSFILE, OSFIND, OSBGET, OSBPUT, OSARGS, OSFSC, OSBYTE, BBCError
 from .fsbbc import FS, BBCFileNotFoundError, open_in, open_out
 
 
@@ -315,6 +315,148 @@ class OSARGShost(OSARGS):
         return None
 
 
+class OSFSChost(OSFSC):
+
+    def __init__(self, fs):
+        super(OSFSChost, self).__init__()
+        self.fs = fs
+
+    def dispatch_parameters(self, regs, memory):
+        """
+        Decode the parameters for the address.
+        """
+        address = regs.x | (regs.y << 8)
+        return [regs.a, address, regs, memory]
+
+    def opt(self, x, y, regs, memory):
+        """
+        *OPT X, Y issued
+
+        @param x, y:        Parameters to *Opt
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        True if handled,
+                        False if not handled
+        """
+        return False
+
+    def eof(self, fh, regs, memory):
+        """
+        EOF#fh check
+
+        @param fh:
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        True if EOF,
+                        False if not EOF,
+                        None if not handled
+        """
+        return self.fs.eof(fh)
+
+    def slash(self, cli, regs, memory):
+        """
+        */<command> issued.
+
+        @param cli:         CLI to execute
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        True if handled,
+                        False if not handled
+        """
+        return False
+
+    def ukcommand(self, cli, regs, memory):
+        """
+        Unknown command issued
+
+        @param cli:         Command issued
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        True if handled,
+                        False if not handled
+        """
+        return False
+
+    def run(self, run, regs, memory):
+        """
+        *Run issued.
+
+        @param run:         Command to run
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        True if handled,
+                        False if not handled
+        """
+        return False
+
+    def cat(self, dir, regs, memory):
+        """
+        *Cat issued
+
+        @param dir:         Directory name
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        True if handled,
+                        False if not handled
+        """
+        return False
+
+    def fs_starting(self, regs, memory):
+        """
+        New FS is starting.
+
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        True if handled,
+                        False if not handled
+        """
+        return False
+
+    def get_handle_range(self, regs, memory):
+        """
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        None if not handled
+                        Tuple of (low handle, high handle) if handled
+        """
+        return self.fs.handle_range()
+
+    def star_command(self, regs, memory):
+        """
+        @param regs:        Registers object
+        @param memory:      Memory object
+
+        @return:        True if handled,
+                        False if not handled
+        """
+        return False
+
+
+class OSBYTEhost(OSBYTE):
+
+    def __init__(self, fs):
+        super(OSBYTEhost, self).__init__()
+        self.fs = fs
+
+        self.dispatch[0x7F] = self.osbyte_eof
+
+    def osbyte_eof(self, a, x, y, regs, memory):
+        fh = x
+        if self.fs.eof(fh):
+            regs.x = 0xFF
+        else:
+            regs.x = 0
+        return True
+
+
 def host_fs_interfaces(basedir):
     """
     Construct a list of OS interfaces for filesystems, using a host base directory.
@@ -326,4 +468,6 @@ def host_fs_interfaces(basedir):
             lambda: OSBGEThost(fs),
             lambda: OSBPUThost(fs),
             lambda: OSARGShost(fs),
+            lambda: OSFSChost(fs),
+            lambda: OSBYTEhost(fs),
         ]

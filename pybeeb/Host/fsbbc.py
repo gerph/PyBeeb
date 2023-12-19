@@ -327,12 +327,13 @@ class FS(object):
 
     open_loadaddr = 0xFFFFFFFF
     open_execaddr = 0xFFFFFFFF
+    filehandle_max = 255
 
     def __init__(self, basedir="."):
         self.basedir = basedir
         self.cached = {}
         self.filehandles = {}
-        self._next_filehandle = 255
+        self._next_filehandle = self.filehandle_max
 
         try:
             self.native_uid = os.getuid()
@@ -483,7 +484,7 @@ class FS(object):
 
         if self._next_filehandle == 0:
             # We got to the end and there weren't any handles. Start again
-            self._next_filehandle = 256
+            self._next_filehandle = self.filehandle_max + 1
             while self._next_filehandle != 0:
                 self._next_filehandle -= 1
                 if self._next_filehandle not in self.filehandles:
@@ -495,19 +496,22 @@ class FS(object):
         if handle > self._next_filehandle:
             self._next_filehandle = handle
             # If the handle one higher is also free, the next handle can be that one.
-            while handle < 255:
+            while handle < self.filehandle_max:
                 handle += 1
                 if handle not in self.filehandles:
                     self._next_filehandle = handle
                 else:
                     break
 
-    def find_handle(self, handle):
+    def find_filehandle(self, handle):
         bfh = self.filehandles.get(handle, None)
         if not bfh:
             # FIXME: Fix error number
             raise BBCBadHandleError(0, "Bad file handle")
         return bfh
+
+    def filehandle_range(self):
+        return (1, self.filehandle_max)
 
     def ensure_exists(self, path, loadaddr, execaddr):
         """
@@ -589,34 +593,34 @@ class FS(object):
             # FIXME: Could make this work as on the BBC
             raise BBCError(0, "Not closing all files")
 
-        bfh = self.find_handle(handle)
+        bfh = self.find_filehandle(handle)
         bfh.close()
         self.release_filehandle(handle)
 
     def ptr_write(self, handle, ptr):
-        bfh = self.find_handle(handle)
+        bfh = self.find_filehandle(handle)
         return bfh.ptr(ptr)
 
     def ptr_read(self, handle):
-        bfh = self.find_handle(handle)
+        bfh = self.find_filehandle(handle)
         return bfh.ptr()
 
     def ext_read(self, handle):
-        bfh = self.find_handle(handle)
+        bfh = self.find_filehandle(handle)
         return bfh.ext()
 
     def flush(self, handle):
-        bfh = self.find_handle(handle)
+        bfh = self.find_filehandle(handle)
         bfh.flush()
 
     def read(self, handle, size):
-        bfh = self.find_handle(handle)
+        bfh = self.find_filehandle(handle)
         return bfh.read(size)
 
     def write(self, handle, data):
-        bfh = self.find_handle(handle)
+        bfh = self.find_filehandle(handle)
         return bfh.write(data)
 
     def eof(self, handle):
-        bfh = self.find_handle(handle)
+        bfh = self.find_filehandle(handle)
         return bfh.eof()
