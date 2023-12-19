@@ -1,5 +1,5 @@
 """
-Implementations of the OS interfaces which communicate with the host.
+Implementations of the OS interfaces which communicate with the host for input and output.
 """
 
 import sys

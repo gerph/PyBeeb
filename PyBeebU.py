@@ -11,7 +11,7 @@ import sys
 from pybeeb.PyBeebicorn import Pb, PbError, PbConstants
 from pybeeb.Host import (BBCError, InputEOFError, OSInterface,
                          OSCLI, OSBYTE, OSFILE, OSFIND, OSARGS, OSBPUT, OSBGET, OSGBPB, OSFSC)
-from pybeeb.Host.host import OSWRCHtty, OSRDCHtty, OSWORDtty
+from pybeeb.Host.hosttty import OSWRCHtty, OSRDCHtty, OSWORDtty
 from pybeeb.Host.hostfs import host_fs_interfaces
 
 
