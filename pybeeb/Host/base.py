@@ -490,7 +490,7 @@ class OSFILE(OSInterface):
 
 
 class OSARGS(OSInterface):
-    code = 0xF1E8
+    code = 0xF18E
     vector = 0x0214
 
     def call(self, regs, memory):
@@ -522,6 +522,7 @@ class OSARGS(OSInterface):
                 255: Flush file to storage
         """
         handled = False
+        #print("OSArgs: fh=%i, addr=%x" % (fh, address))
         if fh == 0:
             # Filehandle = 0
             if op == 0x00:
@@ -557,7 +558,7 @@ class OSARGS(OSInterface):
 
             elif op == 0x02:
                 # Read EXT#
-                handled = self.read_ext(fh, regs, memory)
+                result = self.read_ext(fh, regs, memory)
                 handled = result is not None
                 if handled:
                     memory.writeLongWord(address, result)
