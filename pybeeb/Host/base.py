@@ -174,6 +174,9 @@ class OSWRCH(OSInterface):
 
 
 class OSRDCH(OSInterface):
+    """
+    OSRDCH entry at the top of the routine.
+    """
     code = 0xDEC5
     vector = 0x0210
 
@@ -195,6 +198,43 @@ class OSRDCH(OSInterface):
 
         # Return immediately with an RTS
         return True
+
+    def readc(self):
+        return None
+
+
+class OSRDCHpostbuffer(OSInterface):
+    """
+    OSRDCH, but only after the buffer has been read.
+
+    Handling this entry after the buffer has been read allows *EXEC and insertions through *Key and *FX138.
+
+    =>  C = 0 if character already returned from buffer.
+        C = 1 if no character was read, in A
+    """
+    code = 0xDEF0
+    vector = None
+
+    def call(self, regs, memory):
+        if not regs.carry:
+            # A character was already read
+            return False
+
+        ch = self.readc()
+        if ch is None:
+            return False
+
+        ch = ord(ch)
+        if ch == 27:
+            # Bit of a hack as we don't have interrupts
+            # Set the escape flag
+            memory.writeByte(0xFF, 0x80)
+
+        regs.carry = False
+        regs.a = ch
+
+        # The state we've just updated with will cause us to return the character
+        return False
 
     def readc(self):
         return None

@@ -4,7 +4,7 @@ Implementations of the OS interfaces which communicate with the host for input a
 
 import sys
 
-from .base import OSInterface, OSWRCH, OSRDCH, OSWORD, OSBYTE, InputEOFError
+from .base import OSInterface, OSWRCH, OSRDCHpostbuffer, OSWORD, OSBYTE, InputEOFError
 from .console import Console
 
 
@@ -20,7 +20,7 @@ class OSWRCHtty(OSWRCH):
         return True
 
 
-class OSRDCHtty(OSRDCH):
+class OSRDCHtty(OSRDCHpostbuffer):
 
     def __init__(self):
         super(OSRDCHtty, self).__init__()
