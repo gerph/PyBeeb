@@ -105,7 +105,7 @@ class OSInterface(object):
         # The dispatcher used will be called with the parameters
         # returned by the `dispatch_parameters` method. By default these
         # are:
-        #   (A, X, Y, regs, memory)
+        #   (A, X, Y, pb)
         self.dispatch = {}
         self.dispatch_default = None
 
@@ -121,18 +121,17 @@ class OSInterface(object):
         """
         pass
 
-    def dispatch_parameters(self, regs, memory):
+    def dispatch_parameters(self, pb):
         """
         Prepare a set of parameters to pass to the dispatcher.
 
-        @param regs:        Registers object, containing a, x, y, pc, and sp properties + the flags
-        @param memory:      Memory object, containing the (read|write)(Byte|Bytes|Word|SignedByte) methods
+        @param pb:  Emulator object, containing `regs` and `memory`
 
         @return:    list of parameters to pass to the dispatcher
         """
-        return [regs.a, regs.x, regs.y, regs, memory]
+        return [pb.regs.a, pb.regs.x, pb.regs.y, pb]
 
-    def call(self, regs, memory):
+    def call(self, pb):
         """
         Call the interface with a given set of parameters.
 
@@ -140,21 +139,20 @@ class OSInterface(object):
 
         May raise exception BBCError to indicate that an error should be reported.
 
-        @param regs:        Registers object, containing a, x, y, pc, and sp properties + the flags
-        @param memory:      Memory object, containing the (read|write)(Byte|Bytes|Word|SignedByte) methods
+        @param pb:  Emulator object, containing `regs` and `memory`
 
         @return:    True if the call has been handled (return from interface),
                     False if call should continue at the code execution point
         """
-        dispatcher = self.dispatch.get((regs.a, regs.x, regs.y), None)
+        dispatcher = self.dispatch.get((pb.regs.a, pb.regs.x, pb.regs.y), None)
         if dispatcher is None:
-            dispatcher = self.dispatch.get((regs.a, regs.x), None)
+            dispatcher = self.dispatch.get((pb.regs.a, pb.regs.x), None)
             if dispatcher is None:
-                dispatcher = self.dispatch.get(regs.a, None)
+                dispatcher = self.dispatch.get(pb.regs.a, None)
                 if dispatcher is None:
                     dispatcher = self.dispatch_default
         if dispatcher:
-            params = self.dispatch_parameters(regs, memory)
+            params = self.dispatch_parameters(pb)
             return dispatcher(*params)
         return False
 
@@ -163,8 +161,8 @@ class OSWRCH(OSInterface):
     code = 0xE0A4
     vector = 0x020E
 
-    def call(self, regs, memory):
-        return self.writec(regs.a)
+    def call(self, pb):
+        return self.writec(pb.regs.a)
 
     def writec(self, ch):
         """
@@ -180,21 +178,21 @@ class OSRDCH(OSInterface):
     code = 0xDEC5
     vector = 0x0210
 
-    def call(self, regs, memory):
+    def call(self, pb):
         ch = self.readc()
         if ch is None:
             return False
 
         ch = ord(ch)
         if ch == 27:
-            regs.carry = True
+            pb.regs.carry = True
 
             # Bit of a hack as we don't have interrupts
             # Set the escape flag
-            memory.writeByte(0xFF, 0x80)
+            pb.memory.writeByte(0xFF, 0x80)
         else:
-            regs.carry = False
-        regs.a = ch
+            pb.regs.carry = False
+        pb.regs.a = ch
 
         # Return immediately with an RTS
         return True
@@ -215,8 +213,8 @@ class OSRDCHpostbuffer(OSInterface):
     code = 0xDEF0
     vector = None
 
-    def call(self, regs, memory):
-        if not regs.carry:
+    def call(self, pb):
+        if not pb.regs.carry:
             # A character was already read
             return False
 
@@ -228,10 +226,10 @@ class OSRDCHpostbuffer(OSInterface):
         if ch == 27:
             # Bit of a hack as we don't have interrupts
             # Set the escape flag
-            memory.writeByte(0xFF, 0x80)
+            pb.memory.writeByte(0xFF, 0x80)
 
-        regs.carry = False
-        regs.a = ch
+        pb.regs.carry = False
+        pb.regs.a = ch
 
         # The state we've just updated with will cause us to return the character
         return False
@@ -244,9 +242,9 @@ class OSCLI(OSInterface):
     code = 0xDF89
     vector = 0x0208
 
-    def call(self, regs, memory):
-        xy = regs.x | (regs.y << 8)
-        cli = memory.readString(xy)
+    def call(self, pb):
+        xy = pb.regs.x | (pb.regs.y << 8)
+        cli = pb.memory.readString(xy)
         while cli[0:1] == b'*':
             cli = cli[1:]
         if b' ' in cli:
@@ -269,7 +267,7 @@ class OSBYTE(OSInterface):
         super(OSBYTE, self).__init__()
         self.dispatch_default = self.osbyte
 
-    def osbyte(self, a, x, y, regs, memory):
+    def osbyte(self, a, x, y, pb):
         return False
 
 
@@ -281,17 +279,17 @@ class OSWORD(OSInterface):
         super(OSWORD, self).__init__()
 
         # The dispatcher used will be called with the parameters
-        #   (a, address, regs, memory)
+        #   (a, address, pb)
         self.dispatch_default = self.osword
 
-    def dispatch_parameters(self, regs, memory):
+    def dispatch_parameters(self, pb):
         """
         Decode the paramters for the address.
         """
-        address = regs.x | (regs.y << 8)
-        return [regs.a, address, regs, memory]
+        address = pb.regs.x | (pb.regs.y << 8)
+        return [pb.regs.a, address, pb]
 
-    def osword(self, a, address, regs, memory):
+    def osword(self, a, address, pb):
         return False
 
 
@@ -303,16 +301,16 @@ class OSFILE(OSInterface):
         super(OSFILE, self).__init__()
 
         # The default dispatcher is called with:
-        #   (op, filename, address, regs, memory)
+        #   (op, filename, address, pb)
         self.dispatch_default = self.osfile
 
-    def dispatch_parameters(self, regs, memory):
-        address = regs.x | (regs.y << 8)
-        filename_ptr = memory.readWord(address)
-        filename = memory.readString(filename_ptr)
-        return [regs.a, filename, address, regs, memory]
+    def dispatch_parameters(self, pb):
+        address = pb.regs.x | (pb.regs.y << 8)
+        filename_ptr = pb.memory.readWord(address)
+        filename = pb.memory.readString(filename_ptr)
+        return [pb.regs.a, filename, address, pb]
 
-    def osfile(self, op, filename, address, regs, memory):
+    def osfile(self, op, filename, address, pb):
         """
         Handle an OSFILE call.
 
@@ -356,8 +354,7 @@ class OSFILE(OSInterface):
         @param op:          operation code from the A register
         @param filename:    The filename to work with
         @param address:     The address of the block for file operations
-        @param regs:        Registers
-        @param memory:      Memory access
+        @param pb:  Emulator object, containing `regs` and `memory`
 
         @return:        True if handled
                         False if not handled
@@ -366,73 +363,73 @@ class OSFILE(OSInterface):
 
         if op == 0:
             # Save
-            src_address = memory.readLongWord(address + 10)
-            src_length = memory.readLongWord(address + 14) - src_address
-            info_load = memory.readLongWord(address + 2)
-            info_exec = memory.readLongWord(address + 6)
-            handled = self.save(filename, src_address, src_length, info_load, info_exec, regs, memory)
+            src_address = pb.memory.readLongWord(address + 10)
+            src_length = pb.memory.readLongWord(address + 14) - src_address
+            info_load = pb.memory.readLongWord(address + 2)
+            info_exec = pb.memory.readLongWord(address + 6)
+            handled = self.save(filename, src_address, src_length, info_load, info_exec, pb)
 
         elif op == 1:
             # Write load+exec+attr
-            info_load = memory.readLongWord(address + 2)
-            info_exec = memory.readLongWord(address + 6)
-            info_attr = memory.readLongWord(address + 14)
-            handled = self.write_info(filename, info_load, info_exec, info_attr, regs, memory)
+            info_load = pb.memory.readLongWord(address + 2)
+            info_exec = pb.memory.readLongWord(address + 6)
+            info_attr = pb.memory.readLongWord(address + 14)
+            handled = self.write_info(filename, info_load, info_exec, info_attr, pb)
 
         elif op == 2:
             # Write load
-            info_load = memory.readLongWord(address + 2)
-            handled = self.write_load(filename, info_load, regs, memory)
+            info_load = pb.memory.readLongWord(address + 2)
+            handled = self.write_load(filename, info_load, pb)
 
         elif op == 3:
             # Write exec
-            info_exec = memory.readLongWord(address + 6)
-            handled = self.write_exec(filename, info_exec, regs, memory)
+            info_exec = pb.memory.readLongWord(address + 6)
+            handled = self.write_exec(filename, info_exec, pb)
 
         elif op == 4:
             # Write attr
-            info_attr = memory.readLongWord(address + 14)
-            handled = self.write_attr(filename, info_attr, regs, memory)
+            info_attr = pb.memory.readLongWord(address + 14)
+            handled = self.write_attr(filename, info_attr, pb)
 
         elif op == 5:
             # Read load+exec+attr
-            result = self.read_info(filename, regs, memory)
+            result = self.read_info(filename, pb)
             if result:
                 handled = True
                 (info_type, info_load, info_exec, info_length, info_attr) = result
-                memory.writeLongWord(address + 2, info_load)
-                memory.writeLongWord(address + 6, info_exec)
-                memory.writeLongWord(address + 10, info_length)
-                memory.writeLongWord(address + 14, info_attr)
-                regs.a = info_type
+                pb.memory.writeLongWord(address + 2, info_load)
+                pb.memory.writeLongWord(address + 6, info_exec)
+                pb.memory.writeLongWord(address + 10, info_length)
+                pb.memory.writeLongWord(address + 14, info_attr)
+                pb.regs.a = info_type
             else:
                 handled = False
 
         elif op == 6:
             # Delete
-            handled = self.delete(filename, regs, memory)
+            handled = self.delete(filename, pb)
 
         elif op == 255:
             # Load
-            if memory.readByte(address + 6) == 0:
-                load_address = memory.readLongWord(address + 2)
+            if pb.memory.readByte(address + 6) == 0:
+                load_address = pb.memory.readLongWord(address + 2)
             else:
                 load_address = None
-            result = self.load(filename, load_address, regs, memory)
+            result = self.load(filename, load_address, pb)
             if result:
                 handled = True
                 (info_type, info_load, info_exec, info_length, info_attr) = result
-                memory.writeLongWord(address + 2, info_load)
-                memory.writeLongWord(address + 6, info_exec)
-                memory.writeLongWord(address + 10, info_length)
-                memory.writeLongWord(address + 14, info_attr)
-                regs.a = info_type
+                pb.memory.writeLongWord(address + 2, info_load)
+                pb.memory.writeLongWord(address + 6, info_exec)
+                pb.memory.writeLongWord(address + 10, info_length)
+                pb.memory.writeLongWord(address + 14, info_attr)
+                pb.regs.a = info_type
             else:
                 handled = False
 
         return handled
 
-    def save(self, filename, src_address, src_length, info_load, info_exec, regs, memory):
+    def save(self, filename, src_address, src_length, info_load, info_exec, pb):
         """
         @param filename:    File to operate on
         @param src_address: Start address for save
@@ -440,88 +437,80 @@ class OSFILE(OSInterface):
         @param info_load:   Load address
         @param info_exec:   Exec address
         @param info_attr:   File attributes
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    True if the call is handled, or False if it's not handled
         """
         return False
 
-    def write_info(self, filename, info_load, info_exec, info_attr, regs, memory):
+    def write_info(self, filename, info_load, info_exec, info_attr, pb):
         """
         @param filename:    File to operate on
         @param info_load:   Load address
         @param info_exec:   Exec address
         @param info_attr:   File attributes
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    True if the call is handled, or False if it's not handled
         """
         return False
 
-    def write_load(self, filename, info_load, regs, memory):
+    def write_load(self, filename, info_load, pb):
         """
         @param filename:    File to operate on
         @param info_load:   Load address
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    True if the call is handled, or False if it's not handled
         """
         return False
 
-    def write_exec(self, filename, info_exec, regs, memory):
+    def write_exec(self, filename, info_exec, pb):
         """
         @param filename:    File to operate on
         @param info_exec:   Exec address
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    True if the call is handled, or False if it's not handled
         """
         return False
 
-    def write_attr(self, filename, info_attr, regs, memory):
+    def write_attr(self, filename, info_attr, pb):
         """
         @param filename:    File to operate on
         @param info_attr:   File attributes
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    True if the call is handled, or False if it's not handled
         """
         return False
 
-    def read_info(self, filename, regs, memory):
+    def read_info(self, filename, pb):
         """
         @param filename:    File to operate on
         @param info_load:   Load address
         @param info_exec:   Exec address
         @param info_attr:   File attributes
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    None if not handled,
                     Tuple of (info_type, info_load, info_exec, info_length, info_attr) if handled
         """
         return None
 
-    def delete(self, filename, regs, memory):
+    def delete(self, filename, pb):
         """
         @param filename:    File to operate on
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    True if the call is handled, or False if it's not handled
         """
         return False
 
-    def load(self, filename, load_address, regs, memory):
+    def load(self, filename, load_address, pb):
         """
         @param filename:    File to operate on
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    None if not handled,
                     Tuple of (info_type, info_load, info_exec, info_length, info_attr) if handled
@@ -533,21 +522,21 @@ class OSARGS(OSInterface):
     code = 0xF18E
     vector = 0x0214
 
-    def call(self, regs, memory):
+    def call(self, pb):
         # NOTE: We do not use the standard dispatcher mechanism here
         #       because the primary discriminator is the Y register,
         #       rather than the A register.
-        dispatcher = self.dispatch.get((regs.a, regs.y), None)
+        dispatcher = self.dispatch.get((pb.regs.a, pb.regs.y), None)
         if dispatcher is None:
-            dispatcher = self.dispatch.get(regs.a, None)
+            dispatcher = self.dispatch.get(pb.regs.a, None)
             if dispatcher is None:
                 dispatcher = self.osargs
 
-        fh = regs.y
-        address = regs.x
-        return dispatcher(regs.a, fh, address, regs, memory)
+        fh = pb.regs.y
+        address = pb.regs.x
+        return dispatcher(pb.regs.a, fh, address, pb)
 
-    def osargs(self, op, fh, address, regs, memory):
+    def osargs(self, op, fh, address, pb):
         """
         Handle OSARGS call for a given reason code and file handle.
 
@@ -566,17 +555,17 @@ class OSARGS(OSInterface):
         if fh == 0:
             # Filehandle = 0
             if op == 0x00:
-                result = self.read_current_filesystem(regs, memory)
+                result = self.read_current_filesystem(pb)
                 handled = result is not None
                 if handled:
-                    regs.a = result
+                    pb.regs.a = result
 
             elif op == 0x01:
                 # Read CLI args
                 result = self.read_cli_args(regs, memory)
                 handled = result is not None
                 if handled:
-                    memory.writeLongWord(address, result)
+                    pb.memory.writeLongWord(address, result)
 
             elif op == 0xFF:
                 # Flush all files
@@ -586,107 +575,100 @@ class OSARGS(OSInterface):
             # Filehandle supplied
             if op == 0x00:
                 # Read PTR#
-                result = self.read_ptr(fh, regs, memory)
+                result = self.read_ptr(fh, pb)
                 handled = result is not None
                 if handled:
-                    memory.writeLongWord(address, result)
+                    pb.memory.writeLongWord(address, result)
 
             elif op == 0x01:
                 # Write PTR#
-                ptr = memory.readLongWord(address)
-                handled = self.write_ptr(fh, ptr, regs, memory)
+                ptr = pb.memory.readLongWord(address)
+                handled = self.write_ptr(fh, ptr, pb)
 
             elif op == 0x02:
                 # Read EXT#
-                result = self.read_ext(fh, regs, memory)
+                result = self.read_ext(fh, pb)
                 handled = result is not None
                 if handled:
-                    memory.writeLongWord(address, result)
+                    pb.memory.writeLongWord(address, result)
 
             elif op == 0xFF:
                 # Flush file to storage
-                handled = self.flush_file(fh, regs, memory)
+                handled = self.flush_file(fh, pb)
 
         return False
 
-    def read_ptr(self, fh, regs, memory):
+    def read_ptr(self, fh, pb):
         """
         Read PTR#.
 
         @param fh:      File handle to read
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:    PTR for the file, or None if not handled
         """
         return None
 
-    def read_ext(self, fh, regs, memory):
+    def read_ext(self, fh, pb):
         """
         Read EXT#.
 
         @param fh:      File handle to read
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:    EXT for the file, or None if not handled
         """
         return None
 
-    def write_ptr(self, fh, ptr, regs, memory):
+    def write_ptr(self, fh, ptr, pb):
         """
         Write PTR#.
 
         @param fh:      File handle to read
         @param ptr:     New PTR value
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:    True if handled, False if not handled
         """
         return None
 
-    def flush_file(self, fh, regs, memory):
+    def flush_file(self, fh, pb):
         """
         Flush file to storage.
 
         @param fh:      File handle to read
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:    True if handled, False if not handled
         """
         return False
 
-    def flush_all_files(self, regs, memory):
+    def flush_all_files(self, pb):
         """
         Flush all files to storage
 
         @param fh:      File handle to read
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:    True if handled, False if not handled
         """
         return False
 
-    def read_current_filesystem(self, regs, memory):
+    def read_current_filesystem(self, pb):
         """
         Read the current filesystem.
 
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:    Filesystem number, or None is not handled
         """
         return None
 
-    def read_cli_args(self, regs, memory):
+    def read_cli_args(self, pb):
         """
         Read the CLI arguments.
 
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:    Address of CLI arguments, or None is not handled
         """
@@ -697,24 +679,25 @@ class OSBGET(OSInterface):
     code = 0xF4C9
     vector = 0x0216
 
-    def call(self, regs, memory):
-        fh = regs.y
-        b = self.osbget(fh, regs, memory)
+    def call(self, pb):
+        fh = pb.regs.y
+        b = self.osbget(fh, pb)
         if b is None:
             return False
 
         if b == -1:
-            regs.carry = True
+            pb.regs.carry = True
         else:
-            regs.carry = False
-            regs.a = b
+            pb.regs.carry = False
+            pb.regs.a = b
         return True
 
-    def osbget(self, fh, regs, memory):
+    def osbget(self, fh, pb):
         """
         Handle BGET, returning the byte read.
 
         @param fh:  File handle to read
+        @param pb:  Emulator object, containing `regs` and `memory`
 
         @return:    byte read, -1 if at file end, or None if not handled
         """
@@ -725,18 +708,19 @@ class OSBPUT(OSInterface):
     code = 0xF529
     vector = 0x0218
 
-    def call(self, regs, memory):
-        fh = regs.y
-        b = regs.a
-        handled = self.osbput(b, fh, regs, memory)
+    def call(self, pb):
+        fh = pb.regs.y
+        b = pb.regs.a
+        handled = self.osbput(b, fh, pb)
         return handled
 
-    def osbput(self, b, fh, regs, memory):
+    def osbput(self, b, fh, pb):
         """
         Handle BPUT, writing the supplied byte to a file..
 
         @param fh:  File handle to write to
         @param b:   Byte to write
+        @param pb:  Emulator object, containing `regs` and `memory`
 
         @return:    True if handled, False if not handled.
         """
@@ -753,19 +737,19 @@ class OSFIND(OSInterface):
         self.dispatch[0x00] = self.call_close
         self.dispatch_default = self.call_open
 
-    def call_close(self, a, x, y, regs, memory):
-        return self.close(fh=y, regs=regs, memory=memory)
+    def call_close(self, a, x, y, pb):
+        return self.close(fh=y, pb=pb)
 
-    def call_open(self, a, x, y, regs, memory):
+    def call_open(self, a, x, y, pb):
         filename_ptr = x | (y << 8)
-        filename = memory.readString(filename_ptr)
-        fh = self.open(a, filename, regs, memory)
+        filename = pb.memory.readString(filename_ptr)
+        fh = self.open(a, filename, pb)
         if fh is None:
             return False
-        regs.a = fh
+        pb.regs.a = fh
         return True
 
-    def open(self, op, filename, regs, memory):
+    def open(self, op, filename, pb):
         """
         Open a file for reading, writing or update.
 
@@ -774,16 +758,18 @@ class OSFIND(OSInterface):
                                 &80: output only
                                 &C0: input and output
         @param filename:    file to open
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    file handle, or 0 if failed to open, or None if not handled
         """
         return None
 
-    def close(self, fh, regs, memory):
+    def close(self, fh, pb):
         """
         Close a previously open file.
 
         @param fh:  file handle to close, or 0 to close all files.
+        @param pb:  Emulator object, containing `regs` and `memory`
 
         @return:    True if handled; False if not handled.
         """
@@ -806,14 +792,14 @@ class OSGBPB(OSInterface):
         self.dispatch[0x08] = self.call_get_filenames
         self.dispatch_default = self.osgbpb
 
-    def dispatch_parameters(self, regs, memory):
+    def dispatch_parameters(self, pb):
         """
         Decode the parameters for the address.
         """
-        address = regs.x | (regs.y << 8)
-        return [regs.a, address, regs, memory]
+        address = pb.regs.x | (pb.regs.y << 8)
+        return [pb.regs.a, address, pb]
 
-    def osgbpb(self, op, address, regs, memory):
+    def osgbpb(self, op, address, pb):
         """
         The control block format is:
 
@@ -844,212 +830,206 @@ class OSGBPB(OSInterface):
         """
         return False
 
-    def call_put_bytes(self, op, address, regs, memory):
+    def call_put_bytes(self, op, address, pb):
         """
         Put bytes (at a given location).
         """
-        fh = memory.readByte(address)
-        dataaddr = memory.readLongWord(address + 1)
-        datalen = memory.readLongWord(address + 5)
+        fh = pb.memory.readByte(address)
+        dataaddr = pb.memory.readLongWord(address + 1)
+        datalen = pb.memory.readLongWord(address + 5)
         if op == 1:
-            ptr = memory.readLongWord(address + 9)
+            ptr = pb.memory.readLongWord(address + 9)
         else:
             ptr = None
-        data = memory.readBytes(dataaddr, datalen)
-        result = self.put_bytes(fh, data, ptr, regs, memory)
+        data = pb.memory.readBytes(dataaddr, datalen)
+        result = self.put_bytes(fh, data, ptr, pb)
         if result:
             (transferred, newptr) = result
             if transferred != datalen:
-                regs.carry = True
-                memory.writeLongWord(address + 5, datalen - transferred)
+                pb.regs.carry = True
+                pb.memory.writeLongWord(address + 5, datalen - transferred)
             else:
-                regs.carry = False
-            memory.writeLongWord(address + 1, dataaddr + transferred)
-            memory.writeLongWord(address + 9, newptr)
+                pb.regs.carry = False
+            pb.memory.writeLongWord(address + 1, dataaddr + transferred)
+            pb.memory.writeLongWord(address + 9, newptr)
             handled = True
         else:
             handled = False
         return handled
 
-    def call_get_bytes(self, op, address, regs, memory):
+    def call_get_bytes(self, op, address, pb):
         """
         Put bytes (at a given location).
         """
-        fh = memory.readByte(address)
-        dataaddr = memory.readLongWord(address + 1)
-        datalen = memory.readLongWord(address + 5)
+        fh = pb.memory.readByte(address)
+        dataaddr = pb.memory.readLongWord(address + 1)
+        datalen = pb.memory.readLongWord(address + 5)
         if op == 1:
-            ptr = memory.readLongWord(address + 9)
+            ptr = pb.memory.readLongWord(address + 9)
         else:
             ptr = None
-        result = self.get_bytes(fh, datalen, ptr, regs, memory)
+        result = self.get_bytes(fh, datalen, ptr, pb)
         if result:
             (data, newptr) = result
             transferred = len(data)
             if transferred != datalen:
-                regs.carry = True
-                memory.writeLongWord(address + 5, datalen - transferred)
+                pb.regs.carry = True
+                pb.memory.writeLongWord(address + 5, datalen - transferred)
             else:
-                regs.carry = False
-            memory.writeLongWord(address + 1, dataaddr + transferred)
-            memory.writeLongWord(address + 9, newptr)
-            memory.writeBytes(dataaddr, data)
+                pb.regs.carry = False
+            pb.memory.writeLongWord(address + 1, dataaddr + transferred)
+            pb.memory.writeLongWord(address + 9, newptr)
+            pb.memory.writeBytes(dataaddr, data)
             handled = True
         else:
             handled = False
         return handled
 
-    def call_get_media_title(self, op, address, regs, memory):
+    def call_get_media_title(self, op, address, pb):
         """
         Get media title and option as <len><title><option>
         """
-        dataaddr = memory.readLongWord(address + 1)
-        datalen = memory.readLongWord(address + 5)
-        result = self.get_media_title(regs, memory)
+        dataaddr = pb.memory.readLongWord(address + 1)
+        datalen = pb.memory.readLongWord(address + 5)
+        result = self.get_media_title(pb)
         if result:
             (title, option) = result
             transferred = 1 + len(title) + 1
             if transferred != datalen:
-                regs.carry = True
-                memory.writeLongWord(address + 5, datalen - transferred)
+                pb.regs.carry = True
+                pb.memory.writeLongWord(address + 5, datalen - transferred)
             else:
-                regs.carry = False
+                pb.regs.carry = False
             data = bytearray([len(title)]) + bytearray(title) + bytearray(option)
-            memory.writeLongWord(address + 1, dataaddr + transferred)
-            memory.writeLongWord(address + 9, transferred)
-            memory.writeBytes(dataaddr, data)
+            pb.memory.writeLongWord(address + 1, dataaddr + transferred)
+            pb.memory.writeLongWord(address + 9, transferred)
+            pb.memory.writeBytes(dataaddr, data)
             handled = True
         else:
             handled = False
         return handled
 
-    def call_get_csd_lib(self, op, address, regs, memory, csd):
+    def call_get_csd_lib(self, op, address, pb, csd):
         """
         Get CSD/library and device as <len><device><len><csd>
         """
-        dataaddr = memory.readLongWord(address + 1)
-        datalen = memory.readLongWord(address + 5)
+        dataaddr = pb.memory.readLongWord(address + 1)
+        datalen = pb.memory.readLongWord(address + 5)
         if csd:
-            result = self.get_csd(regs, memory)
+            result = self.get_csd(pb)
         else:
-            result = self.get_lib(regs, memory)
+            result = self.get_lib(pb)
         if result:
             (device, csd) = result
             transferred = 1 + len(device) + 1 + len(csd)
             if transferred != datalen:
-                regs.carry = True
-                memory.writeLongWord(address + 5, datalen - transferred)
+                pb.regs.carry = True
+                pb.memory.writeLongWord(address + 5, datalen - transferred)
             else:
-                regs.carry = False
+                pb.regs.carry = False
             data = bytearray([len(device)]) + bytearray(device) + bytearray([len(csd)]) + bytearray(csd)
-            memory.writeLongWord(address + 1, dataaddr + transferred)
-            memory.writeLongWord(address + 9, transferred)
-            memory.writeBytes(dataaddr, data)
+            pb.memory.writeLongWord(address + 1, dataaddr + transferred)
+            pb.memory.writeLongWord(address + 9, transferred)
+            pb.memory.writeBytes(dataaddr, data)
             handled = True
         else:
             handled = False
         return handled
 
-    def call_get_filenames(self, op, address, regs, memory, csd):
+    def call_get_filenames(self, op, address, pb, csd):
         """
         Get filenames from the CSD, in form <length><filename>...
         """
-        dataaddr = memory.readLongWord(address + 1)
-        nfiles = memory.readLongWord(address + 5)
-        offset = memory.readLongWord(address + 9)
-        filenames = self.get_csd_filenames(offset, nfiles, regs, memory)
+        dataaddr = pb.memory.readLongWord(address + 1)
+        nfiles = pb.memory.readLongWord(address + 5)
+        offset = pb.memory.readLongWord(address + 9)
+        filenames = self.get_csd_filenames(offset, nfiles, pb)
         if filenames is not None:
             transferred = len(filenames)
             if transferred != nfiles:
-                regs.carry = True
-                memory.writeLongWord(address + 5, nfiles - transferred)
+                pb.regs.carry = True
+                pb.memory.writeLongWord(address + 5, nfiles - transferred)
             else:
-                regs.carry = False
+                pb.regs.carry = False
             for filename in filenames:
                 data = bytearray([len(filename)]) + bytearray(filename)
-                memory.writeBytes(dataaddr, data)
+                pb.memory.writeBytes(dataaddr, data)
                 dataaddr += len(data)
-            memory.writeLongWord(address + 1, dataaddr)
-            memory.writeLongWord(address + 9, offset + transferred)
+            pb.memory.writeLongWord(address + 1, dataaddr)
+            pb.memory.writeLongWord(address + 9, offset + transferred)
             handled = True
         else:
             handled = False
         return handled
 
-    def put_bytes(self, fh, data, ptr, regs, memory):
+    def put_bytes(self, fh, data, ptr, pb):
         """
         Put bytes to an open file handle.
 
         @param fh:      File handle to read
         @param data:    Data to write
         @param ptr:     File pointer to write at, or None to write to current pointer
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        None if not handled
                         Tuple of (bytes transferred, new file pointer)
         """
         return None
 
-    def get_bytes(self, fh, datalen, ptr, regs, memory):
+    def get_bytes(self, fh, datalen, ptr, pb):
         """
         Get bytes from an open file handle.
 
         @param fh:      File handle to read
         @param datalen: Length of data to read
         @param ptr:     File pointer to read from, or None to read from current pointer
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        None if not handled
                         Tuple of (data read, new file pointer)
         """
         return None
 
-    def get_media_title(self, regs, memory):
+    def get_media_title(self, pb):
         """
         Get the media title and boot option
 
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        None if not handled
                         Tuple of (media title, boot option value)
         """
         return None
 
-    def get_csd(self, regs, memory):
+    def get_csd(self, pb):
         """
         Get the device name (eg "0" for disc 0) and CSD
 
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        None if not handled
                         Tuple of (device name, CSD)
         """
         return None
 
-    def get_lib(self, regs, memory):
+    def get_lib(self, pb):
         """
         Get the device name (eg "0" for disc 0) and library
 
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        None if not handled
                         Tuple of (device name, library directory)
         """
         return None
 
-    def get_csd_filenames(self, nfiles, offset, regs, memory):
+    def get_csd_filenames(self, nfiles, offset, pb):
         """
         Get filenames from the CSD.
 
         @param nfiles:  Maximum number of files to read
         @param offset:  Offset in directory list to start from
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        None if not handled
                         List of filenames if handled
@@ -1074,14 +1054,14 @@ class OSFSC(OSInterface):
         self.dispatch[0x08] = self.call_star_command
         self.dispatch_default = self.osfsc
 
-    def dispatch_parameters(self, regs, memory):
+    def dispatch_parameters(self, pb):
         """
         Decode the parameters for the address.
         """
-        address = regs.x | (regs.y << 8)
-        return [regs.a, address, regs, memory]
+        address = pb.regs.x | (pb.regs.y << 8)
+        return [pb.regs.a, address, pb]
 
-    def osfsc(self, op, address, regs, memory):
+    def osfsc(self, op, address, pb):
         """
         Operation codes:
 
@@ -1097,103 +1077,101 @@ class OSFSC(OSInterface):
         """
         return False
 
-    def call_opt(self, op, address, regs, memory):
+    def call_opt(self, op, address, pb):
         """
         *OPT X, Y issued
         """
-        handled = self.opt(regs.x, regs.y, regs, memory)
+        handled = self.opt(pb.regs.x, pb.regs.y, pb)
         return handled
 
-    def call_eof(self, op, address, regs, memory):
+    def call_eof(self, op, address, pb):
         """
         EOF check on a file handle.
         """
-        fh = regs.x
-        eof = self.eof(fh, regs, memory)
+        fh = pb.regs.x
+        eof = self.eof(fh, pb)
         if eof is None:
             return False
-        regs.x = 0xFF if eof else 0x00
+        pb.regs.x = 0xFF if eof else 0x00
         return True
 
-    def call_slash(self, op, address, regs, memory):
+    def call_slash(self, op, address, pb):
         """
         A /<command> has been issued
         """
-        cli = memory.readString(address)
+        cli = pb.memory.readString(address)
         # FIXME: Should we split this up?
-        handled = self.slash(cli, regs, memory)
+        handled = self.slash(cli, pb)
         return handled
 
-    def call_ukcommand(self, op, address, regs, memory):
+    def call_ukcommand(self, op, address, pb):
         """
         An unknown command has been issued
         """
-        cli = memory.readString(address)
+        cli = pb.memory.readString(address)
         # FIXME: Should we split this up?
-        handled = self.ukcommand(cli, regs, memory)
+        handled = self.ukcommand(cli, pb)
         return handled
 
-    def call_run(self, op, address, regs, memory):
+    def call_run(self, op, address, pb):
         """
         *Run has been issued
         """
-        cli = memory.readString(address)
+        cli = pb.memory.readString(address)
         # FIXME: Should we split this up?
-        handled = self.run(cli, regs, memory)
+        handled = self.run(cli, pb)
         return handled
 
-    def call_cat(self, op, address, regs, memory):
+    def call_cat(self, op, address, pb):
         """
         *Cat has been issued
         """
-        cat = memory.readString(address)
-        handled = self.cat(cat, regs, memory)
+        cat = pb.memory.readString(address)
+        handled = self.cat(cat, pb)
         return handled
 
-    def call_fs_starting(self, op, address, regs, memory):
+    def call_fs_starting(self, op, address, pb):
         """
         A new FS is starting up
         """
-        handled = self.fs_starting(regs, memory)
+        handled = self.fs_starting(pb)
         return handled
 
-    def call_get_handle_range(self, op, address, regs, memory):
+    def call_get_handle_range(self, op, address, pb):
         """
         Read the range of file handles supported.
         """
-        result = self.get_handle_range(regs, memory)
+        result = self.get_handle_range(pb)
         if result is None:
             return False
-        (regs.x, regs.y) = result
+        (pb.regs.x, pb.regs.y) = result
         return True
 
-    def call_star_command(self, op, address, regs, memory):
+    def call_star_command(self, op, address, pb):
         """
         New *command issued (for handling *Enable)
         """
-        handled = self.star_command(regs, memory)
+        handled = self.star_command(pb)
         return handled
 
-    def opt(self, x, y, regs, memory):
+    def opt(self, x, y, pb):
         """
         *OPT X, Y issued
 
-        @param x, y:        Parameters to *Opt
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param x, y:    Parameters to *Opt
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if handled,
                         False if not handled
         """
         return False
 
-    def eof(self, fh, regs, memory):
+    def eof(self, fh, pb):
         """
         EOF#fh check
 
-        @param fh:
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param fh:      File handle to check
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if EOF,
                         False if not EOF,
@@ -1201,87 +1179,79 @@ class OSFSC(OSInterface):
         """
         return False
 
-    def slash(self, cli, regs, memory):
+    def slash(self, cli, pb):
         """
         */<command> issued.
 
-        @param cli:         CLI to execute
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param cli:     CLI to execute
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if handled,
                         False if not handled
         """
         return False
 
-    def ukcommand(self, cli, regs, memory):
+    def ukcommand(self, cli, pb):
         """
         Unknown command issued
 
-        @param cli:         Command issued
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param cli:     Command issued
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if handled,
                         False if not handled
         """
         return False
 
-    def run(self, run, regs, memory):
+    def run(self, run, pb):
         """
         *Run issued.
 
-        @param run:         Command to run
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param run:     Command to run
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if handled,
                         False if not handled
         """
         return False
 
-    def cat(self, dir, regs, memory):
+    def cat(self, dir, pb):
         """
         *Cat issued
 
-        @param dir:         Directory name
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param dir:     Directory name
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if handled,
                         False if not handled
         """
         return False
 
-    def fs_starting(self, regs, memory):
+    def fs_starting(self, pb):
         """
         New FS is starting.
 
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if handled,
                         False if not handled
         """
         return False
 
-    def get_handle_range(self, regs, memory):
+    def get_handle_range(self, pb):
         """
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        None if not handled
                         Tuple of (low handle, high handle) if handled
         """
         return False
 
-    def star_command(self, regs, memory):
+    def star_command(self, pb):
         """
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if handled,
                         False if not handled
         """
         return False
-

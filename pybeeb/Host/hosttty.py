@@ -57,7 +57,7 @@ class OSBYTEtty(OSBYTE):
     def stop(self):
         self.console.terminal_reset()
 
-    def inkey(self, a, x, y, regs, memory):
+    def inkey(self, a, x, y, pb):
         if y == 0xFF and x == 0:
             # Read machine type
             return False
@@ -74,16 +74,16 @@ class OSBYTEtty(OSBYTE):
 
         if ch is not None:
             # If a character is detected, X=ASCII value of key pressed, Y=0 and C=0.
-            regs.x = ord(ch)
-            regs.y = 0
-            regs.carry = False
+            pb.regs.x = ord(ch)
+            pb.regs.y = 0
+            pb.regs.carry = False
         else:
             # If a character is not detected within timeout then Y=&FF and C=1.
-            regs.y = 0xff
-            regs.carry = False
+            pb.regs.y = 0xff
+            pb.regs.carry = False
         if ch == b'\x1b':
             # If Escape is pressed then Y=&1B (27) and C=1.
-            regs.carry = True
+            pb.regs.carry = True
 
         return True
 
@@ -99,10 +99,10 @@ class OSWORDtty(OSWORD):
         # The keys in the dictionary may the value of the A register.
         # If no matching key exists, the method `osword` will be used.
         # The dispatcher used will be called with the parameters
-        # `(a, address, regs, memory)`.
+        # `(a, address, pb)`.
         self.dispatch[0x00] = self.osword_readline
 
-    def osword_readline(self, a, address, regs, memory):
+    def osword_readline(self, a, address, pb):
         # The parameter block:
         #     XY+ 0    Buffer address for input   LSB
         #         1                               MSB
@@ -117,10 +117,10 @@ class OSWORDtty(OSWORD):
         #          C=1 if an ESCAPE condition terminated input.
         #          Y contains line length, including carriage return if
         #          used.
-        input_memory = memory.readWord(address)
-        maxline = memory.readByte(address + 2)
-        lowest = memory.readByte(address + 3)
-        highest = memory.readByte(address + 4)
+        input_memory = pb.memory.readWord(address)
+        maxline = pb.memory.readByte(address + 2)
+        lowest = pb.memory.readByte(address + 3)
+        highest = pb.memory.readByte(address + 4)
 
         try:
             sys.stdout.flush()
@@ -128,16 +128,16 @@ class OSWORDtty(OSWORD):
             result = result[:maxline - 1]
             result = result + '\r'
             # FIXME: Note that the lowest and highest are not honoured by this
-            regs.carry = False
-            regs.y = len(result)
-            memory.writeBytes(input_memory, bytearray(result.encode('latin-1')))
+            pb.regs.carry = False
+            pb.regs.y = len(result)
+            pb.memory.writeBytes(input_memory, bytearray(result.encode('latin-1')))
 
         except EOFError:
             raise InputEOFError("EOF received from terminal")
 
         except KeyboardInterrupt:
-            regs.carry = True
-            regs.y = 0
+            pb.regs.carry = True
+            pb.regs.y = 0
 
         return True
 

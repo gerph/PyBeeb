@@ -12,7 +12,7 @@ class OSFILEhost(OSFILE):
         super(OSFILEhost, self).__init__()
         self.fs = fs
 
-    def save(self, filename, src_address, src_length, info_load, info_exec, regs, memory):
+    def save(self, filename, src_address, src_length, info_load, info_exec, pb):
         """
         @param filename:    File to operate on
         @param src_address: Start address for save
@@ -20,37 +20,34 @@ class OSFILEhost(OSFILE):
         @param info_load:   Load address
         @param info_exec:   Exec address
         @param info_attr:   File attributes
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    True if the call is handled, or False if it's not handled
         """
         self.fs.ensure_exists(filename, info_load, info_exec)
         handle = self.fs.open(filename, open_out)
-        data = memory.readBytes(src_address & 0xFFFF, src_length)
+        data = pb.memory.readBytes(src_address & 0xFFFF, src_length)
         self.fs.write(handle, data)
         return True
 
-    def write_info(self, filename, info_load, info_exec, info_attr, regs, memory):
+    def write_info(self, filename, info_load, info_exec, info_attr, pb):
         """
         @param filename:    File to operate on
         @param info_load:   Load address
         @param info_exec:   Exec address
         @param info_attr:   File attributes
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    True if the call is handled, or False if it's not handled
         """
         self.fs.set_fileinfo(filename, info_load, info_exec, info_attr)
         return True
 
-    def write_load(self, filename, info_load, regs, memory):
+    def write_load(self, filename, info_load, pb):
         """
         @param filename:    File to operate on
         @param info_load:   Load address
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    True if the call is handled, or False if it's not handled
         """
@@ -58,12 +55,11 @@ class OSFILEhost(OSFILE):
         self.fs.set_fileinfo(filename, info_load, info_exec, info_attr)
         return True
 
-    def write_exec(self, filename, info_exec, regs, memory):
+    def write_exec(self, filename, info_exec, pb):
         """
         @param filename:    File to operate on
         @param info_exec:   Exec address
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    True if the call is handled, or False if it's not handled
         """
@@ -71,12 +67,11 @@ class OSFILEhost(OSFILE):
         self.fs.set_fileinfo(filename, info_load, info_exec, info_attr)
         return True
 
-    def write_attr(self, filename, info_attr, regs, memory):
+    def write_attr(self, filename, info_attr, pb):
         """
         @param filename:    File to operate on
         @param info_attr:   File attributes
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    True if the call is handled, or False if it's not handled
         """
@@ -84,14 +79,13 @@ class OSFILEhost(OSFILE):
         self.fs.set_fileinfo(filename, info_load, info_exec, info_attr)
         return True
 
-    def read_info(self, filename, regs, memory):
+    def read_info(self, filename, pb):
         """
         @param filename:    File to operate on
         @param info_load:   Load address
         @param info_exec:   Exec address
         @param info_attr:   File attributes
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    None if not handled,
                     Tuple of (info_type, info_load, info_exec, info_length, info_attr) if handled
@@ -99,22 +93,20 @@ class OSFILEhost(OSFILE):
         (info_type, info_load, info_exec, info_length, info_attr) = self.fs.fileinfo(filename)
         return (info_type, info_load, info_exec, info_length, info_attr)
 
-    def delete(self, filename, regs, memory):
+    def delete(self, filename, pb):
         """
         @param filename:    File to operate on
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    True if the call is handled, or False if it's not handled
         """
         self.fs.delete(filename)
         return True
 
-    def load(self, filename, load_address, regs, memory):
+    def load(self, filename, load_address, pb):
         """
         @param filename:    File to operate on
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    None if not handled,
                     Tuple of (info_type, info_load, info_exec, info_length, info_attr) if handled
@@ -135,7 +127,7 @@ class OSFILEhost(OSFILE):
             handle = self.fs.open(filename, open_in)
             size = self.fs.ext_read(handle)
             data = self.fs.read(handle, size)
-            memory.writeBytes(load_address & 0xFFFF, data)
+            pb.memory.writeBytes(load_address & 0xFFFF, data)
         finally:
             if handle:
                 self.fs.close(handle)
@@ -149,7 +141,7 @@ class OSFINDhost(OSFIND):
         super(OSFINDhost, self).__init__()
         self.fs = fs
 
-    def open(self, op, filename, regs, memory):
+    def open(self, op, filename, pb):
         """
         Open a file for reading, writing or update.
 
@@ -158,6 +150,7 @@ class OSFINDhost(OSFIND):
                                 &80: output only
                                 &C0: input and output
         @param filename:    file to open
+        @param pb:          Emulator object, containing `regs` and `memory`
 
         @return:    file handle, or 0 if failed to open, or None if not handled
         """
@@ -168,11 +161,12 @@ class OSFINDhost(OSFIND):
 
         return handle
 
-    def close(self, fh, regs, memory):
+    def close(self, fh, pb):
         """
         Close a previously open file.
 
         @param fh:  file handle to close, or 0 to close all files.
+        @param pb:  Emulator object, containing `regs` and `memory`
 
         @return:    True if handled; False if not handled.
         """
@@ -186,11 +180,12 @@ class OSBGEThost(OSBGET):
         super(OSBGEThost, self).__init__()
         self.fs = fs
 
-    def osbget(self, fh, regs, memory):
+    def osbget(self, fh, pb):
         """
         Handle BGET, returning the byte read.
 
         @param fh:  File handle to read
+        @param pb:  Emulator object, containing `regs` and `memory`
 
         @return:    byte read, -1 if at file end, or None if not handled
         """
@@ -206,12 +201,13 @@ class OSBPUThost(OSBPUT):
         super(OSBPUThost, self).__init__()
         self.fs = fs
 
-    def osbput(self, b, fh, regs, memory):
+    def osbput(self, b, fh, pb):
         """
         Handle BPUT, writing the supplied byte to a file..
 
         @param fh:  File handle to write to
         @param b:   Byte to write
+        @param pb:  Emulator object, containing `regs` and `memory`
 
         @return:    True if handled, False if not handled.
         """
@@ -227,88 +223,81 @@ class OSARGShost(OSARGS):
         super(OSARGShost, self).__init__()
         self.fs = fs
 
-    def read_ptr(self, fh, regs, memory):
+    def read_ptr(self, fh, pb):
         """
         Read PTR#.
 
         @param fh:      File handle to read
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:    PTR for the file, or None if not handled
         """
         ptr = self.fs.ptr_read(fh)
         return ptr
 
-    def read_ext(self, fh, regs, memory):
+    def read_ext(self, fh, pb):
         """
         Read EXT#.
 
         @param fh:      File handle to read
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:    EXT for the file, or None if not handled
         """
         ext = self.fs.ext_read(fh)
         return ext
 
-    def write_ptr(self, fh, ptr, regs, memory):
+    def write_ptr(self, fh, ptr, pb):
         """
         Write PTR#.
 
         @param fh:      File handle to read
         @param ptr:     New PTR value
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:    True if handled, False if not handled
         """
         self.fs.ptr_write(fh, ptr)
         return True
 
-    def flush_file(self, fh, regs, memory):
+    def flush_file(self, fh, pb):
         """
         Flush file to storage.
 
         @param fh:      File handle to read
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:    True if handled, False if not handled
         """
         self.fs.flush(fh)
         return True
 
-    def flush_all_files(self, regs, memory):
+    def flush_all_files(self, pb):
         """
         Flush all files to storage
 
         @param fh:      File handle to read
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:    True if handled, False if not handled
         """
         return False
 
-    def read_current_filesystem(self, regs, memory):
+    def read_current_filesystem(self, pb):
         """
         Read the current filesystem.
 
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:    Filesystem number, or None is not handled
         """
         return 4    # FS_DFS
 
-    def read_cli_args(self, regs, memory):
+    def read_cli_args(self, pb):
         """
         Read the CLI arguments.
 
-        @param regs:    Registers object
-        @param memory:  Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:    Address of CLI arguments, or None is not handled
         """
@@ -321,33 +310,31 @@ class OSFSChost(OSFSC):
         super(OSFSChost, self).__init__()
         self.fs = fs
 
-    def dispatch_parameters(self, regs, memory):
+    def dispatch_parameters(self, pb):
         """
         Decode the parameters for the address.
         """
-        address = regs.x | (regs.y << 8)
-        return [regs.a, address, regs, memory]
+        address = pb.regs.x | (pb.regs.y << 8)
+        return [pb.regs.a, address, pb]
 
-    def opt(self, x, y, regs, memory):
+    def opt(self, x, y, pb):
         """
         *OPT X, Y issued
 
-        @param x, y:        Parameters to *Opt
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param x, y:    Parameters to *Opt
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if handled,
                         False if not handled
         """
         return False
 
-    def eof(self, fh, regs, memory):
+    def eof(self, fh, pb):
         """
         EOF#fh check
 
-        @param fh:
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param fh:      File handle
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if EOF,
                         False if not EOF,
@@ -355,84 +342,77 @@ class OSFSChost(OSFSC):
         """
         return self.fs.eof(fh)
 
-    def slash(self, cli, regs, memory):
+    def slash(self, cli, pb):
         """
         */<command> issued.
 
-        @param cli:         CLI to execute
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param cli:     CLI to execute
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if handled,
                         False if not handled
         """
         return False
 
-    def ukcommand(self, cli, regs, memory):
+    def ukcommand(self, cli, pb):
         """
         Unknown command issued
 
-        @param cli:         Command issued
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param cli:     Command issued
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if handled,
                         False if not handled
         """
         return False
 
-    def run(self, run, regs, memory):
+    def run(self, run, pb):
         """
         *Run issued.
 
-        @param run:         Command to run
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param run:     Command to run
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if handled,
                         False if not handled
         """
         return False
 
-    def cat(self, dir, regs, memory):
+    def cat(self, dir, pb):
         """
         *Cat issued
 
-        @param dir:         Directory name
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param dir:     Directory name
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if handled,
                         False if not handled
         """
         return False
 
-    def fs_starting(self, regs, memory):
+    def fs_starting(self, pb):
         """
         New FS is starting.
 
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if handled,
                         False if not handled
         """
         return False
 
-    def get_handle_range(self, regs, memory):
+    def get_handle_range(self, pb):
         """
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        None if not handled
                         Tuple of (low handle, high handle) if handled
         """
         return self.fs.handle_range()
 
-    def star_command(self, regs, memory):
+    def star_command(self, pb):
         """
-        @param regs:        Registers object
-        @param memory:      Memory object
+        @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if handled,
                         False if not handled
@@ -448,12 +428,12 @@ class OSBYTEhost(OSBYTE):
 
         self.dispatch[0x7F] = self.osbyte_eof
 
-    def osbyte_eof(self, a, x, y, regs, memory):
+    def osbyte_eof(self, a, x, y, pb):
         fh = x
         if self.fs.eof(fh):
-            regs.x = 0xFF
+            pb.regs.x = 0xFF
         else:
-            regs.x = 0
+            pb.regs.x = 0
         return True
 
 

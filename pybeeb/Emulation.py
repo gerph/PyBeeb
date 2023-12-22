@@ -228,9 +228,9 @@ class PbDispatcher(Dispatch.Dispatcher):
         for hook in self.hook_exec:
             if pc in hook:
                 hook.call(pc, length)
-                if pc != self.pb.reg.pc:
+                if pc != self.pb.regs.pc:
                     # They changed the execution location, so we're not running this instruction any more.
-                    return self.pb.reg.pc
+                    return self.pb.regs.pc
 
         if self.pb.executing:
             return super(PbDispatcher, self).execute(pc, length, opcode, instruction, writeback)
@@ -359,24 +359,44 @@ class PbMemory(Memory.Memory):
 
 class Pb(object):
     """
-    PyBeepicorn main object - similar to the Uc() objects in Unicorn.
+    PyBeep class - similar to the Uc() objects in Unicorn.
+
+    There are properties and methods that can be used to access the emulator:
+
+    * `pb.regs` - An object to access registers by name in lower case.
+                  Flags are given their full name.
+    * `pb.memory` - An object to access memory.
+                  Methods:
+                    `readByte(address, value)`
+                    `writeByte(address)`
+                    `readBytes(address, size)`
+                    `writeBytes(address, data)`
+                    `readLongWord(address)`
+                    `writeLongWord(address, value)`
+                    `readString(address)`
+    * `pb.reg_read` - Read a register using the constants from PbConstants
+                    (Unicorn-like interface)
+    * `pb.mem_read` - Read memory (Unicorn-like interface)
+    * `pb.mem_write` - Write memory (Unicorn-like interface)
+    * `pb.hook_add` - Add a hook to those that we will dispatch (code or memory access hooks)
+    * `pb.hook_del` - Remove a registered hook.
     """
     insts_filename = os.path.join(os.path.dirname(__file__), 'insts.csv')
 
     def __init__(self):
         # We only support 6502, so there is no architecture or mode flag.
         self.memory = PbMemory(self)
-        self.reg = Registers.RegisterBank()
-        addrDispatch = AddressDispatcher.AddressDispatcher(self.memory, self.reg)
+        self.regs = Registers.RegisterBank()
+        addrDispatch = AddressDispatcher.AddressDispatcher(self.memory, self.regs)
 
-        execDispatch = ExecutionUnit.ExecutionDispatcher(self.memory,self.reg)
-        writebackDispatch = Writeback.Dispatcher(self.memory,self.reg)
+        execDispatch = ExecutionUnit.ExecutionDispatcher(self.memory, self.regs)
+        writebackDispatch = Writeback.Dispatcher(self.memory, self.regs)
 
         decoder = Decoder.Decoder(self.insts_filename)
 
         self.dispatch = PbDispatcher(self, decoder, addrDispatch,
                                      execDispatch, writebackDispatch,
-                                     self.memory, self.reg)
+                                     self.memory, self.regs)
 
         self.bbc = BBCMicro.System.Beeb(self.dispatch)
         self.dis = Disassemble6502Pb(self)
@@ -385,34 +405,34 @@ class Pb(object):
 
         def write_pc(v):
             #print("Set PC to &%04x" % (v,))
-            self.reg.pc = v & 0xFFFF
+            self.regs.pc = v & 0xFFFF
 
         def write_sp(v):
-            self.reg.sp = v & 0xFF
+            self.regs.sp = v & 0xFF
 
         def write_a(v):
-            self.reg.a = v & 0xFF
+            self.regs.a = v & 0xFF
 
         def write_x(v):
-            self.reg.x = v & 0xFF
+            self.regs.x = v & 0xFF
 
         def write_y(v):
-            self.reg.y = v & 0xFF
+            self.regs.y = v & 0xFF
 
         def read_pc():
-            return self.reg.pc & 0xFFFF
+            return self.regs.pc & 0xFFFF
 
         def read_sp():
-            return self.reg.sp & 0xFF
+            return self.regs.sp & 0xFF
 
         def read_a():
-            return self.reg.a & 0xFF
+            return self.regs.a & 0xFF
 
         def read_x():
-            return self.reg.x & 0xFF
+            return self.regs.x & 0xFF
 
         def read_y():
-            return self.reg.y & 0xFF
+            return self.regs.y & 0xFF
 
         self.reg_dispatch = {
                 PbConstants.PB_6502_REG_PC: (read_pc, write_pc),
@@ -420,7 +440,7 @@ class Pb(object):
                 PbConstants.PB_6502_REG_A: (read_a, write_a),
                 PbConstants.PB_6502_REG_X: (read_x, write_x),
                 PbConstants.PB_6502_REG_Y: (read_y, write_y),
-                PbConstants.PB_6502_REG_PS: (lambda: self.reg.ps(), lambda v: self.reg.setPS(v)),
+                PbConstants.PB_6502_REG_PS: (lambda: self.regs.ps(), lambda v: self.regs.setPS(v)),
             }
 
     # emulate from @begin, and stop when reaching address @until
@@ -428,8 +448,8 @@ class Pb(object):
         insts = 0
         self.executing = True
         try:
-            while self.executing and self.reg.pc != until:
-                #print "%s: PC: %s" % (insts, hex(self.reg.pc))
+            while self.executing and self.regs.pc != until:
+                #print "%s: PC: %s" % (insts, hex(self.regs.pc))
 
                 self.bbc.tick()
                 insts += 1
