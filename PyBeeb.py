@@ -1,84 +1,124 @@
 #!/usr/bin/env python
 '''
 Created on 12 Oct 2011
+Updated on 09 Dec 2023
 
-@author: chris.whitworth
+@author: chris.whitworth, gerph
 '''
-import os
-import sys
-import pybeeb.CPU.Memory as Memory
-import pybeeb.CPU.Registers as Registers
-import pybeeb.CPU.AddressDispatcher as AddressDispatcher
-import pybeeb.CPU.Writeback as Writeback
-import pybeeb.CPU.ExecutionUnit as ExecutionUnit
-import pybeeb.CPU.Dispatch as Dispatch
-import pybeeb.CPU.InstructionDecoder as Decoder
-import pybeeb.Debugging.Combiner
-import pybeeb.Debugging.Writeback
-import pybeeb.Debugging.ExecutionUnit
-import pybeeb.BBCMicro.System
-import pybeeb
 
-DecodeFilename = os.path.join(os.path.dirname(pybeeb.__file__), "insts.csv")
+import sys
+
+from pybeeb.Emulation import Pb, PbError, PbConstants
+from pybeeb.Host import (BBCError, InputEOFError, OSInterface,
+                         OSCLI, OSBYTE, OSFILE, OSFIND, OSARGS, OSBPUT, OSBGET, OSGBPB, OSFSC)
+from pybeeb.Host.hosttty import OSWRCHtty, OSRDCHtty, OSWORDtty, OSBYTEtty
+from pybeeb.Host.hostfs import host_fs_interfaces
 
 
 class BBC(object):
-    def __init__(self, pcTrace = False, verbose = False):
-        self.mem = Memory.Memory()
-        self.reg = Registers.RegisterBank()
-        addrDispatch = AddressDispatcher.AddressDispatcher(self.mem, self.reg)
-
-        execDispatch = ExecutionUnit.ExecutionDispatcher(self.mem,self.reg)
-        execLogger = pybeeb.Debugging.ExecutionUnit.LoggingExecutionUnit()
-        combinedExec = pybeeb.Debugging.Combiner.Dispatcher( (execLogger, execDispatch) )
-
-        writebackDispatch = Writeback.Dispatcher(self.mem,self.reg)
-        writebackLogger = pybeeb.Debugging.Writeback.LoggingDispatcher()
-        combinedWriteback = pybeeb.Debugging.Combiner.Dispatcher( (writebackLogger, writebackDispatch) )
-
-        decoder = Decoder.Decoder(DecodeFilename)
-
-        self.pcTrace = pcTrace
-        self.verbose = verbose
-
-        dispatch = None
-        if verbose:
-            dispatch = Dispatch.Dispatcher(decoder, addrDispatch,
-                                           combinedExec, combinedWriteback,
-                                           self.mem, self.reg)
-        else:
-            dispatch = Dispatch.Dispatcher(decoder, addrDispatch,
-                                           execDispatch, writebackDispatch,
-                                           self.mem, self.reg)
-
-        self.bbc = pybeeb.BBCMicro.System.Beeb(dispatch)
+    def __init__(self, pcTrace=False, verbose=False):
+        self.pb = Pb()
 
     def go(self, syscalls):
-        instr = 0
-        # NOTE: We only support a single handler per address.
-        syscalls = dict(syscalls)
+        try:
+            # Register the syscall execution entry points
+            hooks = []
+            for addr, func in syscalls:
+                hooks.append(self.pb.hook_add(PbConstants.PB_HOOK_CODE,
+                                              func, begin=addr, end=addr + 1))
 
-        while True:
-            if self.pcTrace:
-                print "%s: PC: %s" % (instr, hex(self.reg.pc))
-            instr += 1
+            self.pb.emu_start(self.pb.reg_read(PbConstants.PB_6502_REG_PC), -2)
+        finally:
+            # Deregister the entry points
+            for hook in hooks:
+                self.pb.hook_del(hook)
 
-            if not self.pcTrace and not self.verbose:
-                if self.reg.pc in syscalls.keys():
-                    syscalls[self.reg.pc](self.reg, self.mem)
 
-            self.bbc.tick()
+class OSCLIquit(OSCLI):
 
-            if self.verbose:
-                self.reg.status()
+    def __init__(self, *args, **kwargs):
+        super(OSCLIquit, self).__init__(*args, **kwargs)
 
-def OS_WRCH(reg,mem): sys.stdout.write(chr(reg.a))
-def OS_RDCH(reg,mem): print "OS_RDCH" # Could inject keypresses here maybe?
+        self.commands_dispatch[b'QUIT'] = self.cmd_quit
+
+    def cmd_quit(self, args, pb):
+        sys.exit()
+
+
+class OSBYTEversion(OSBYTE):
+
+    def __init__(self):
+        super(OSBYTEversion, self).__init__()
+
+        self.dispatch[(0x00, 0x00)] = self.osbyte_osversion_error
+
+    def osbyte_osversion_error(self, a, x, y, pb):
+        raise BBCError(247, "OS 1.20 (PyBeeb)")
+
+
+def main():
+
+    def trace(pb, address, size, user_data):
+        data = pb.mem_read(address, size)
+        execcode = ' '.join('%02X' % (b,) for b in data)
+
+        (inst, formatted, params, comment) = pb.dis.disassemble(address)
+        print("&%04X: %-10s : %s %s" % (address, execcode, inst, formatted))
+
+    def mem_hook(pb, access, address, size, value, user_data):
+        print("Access %s of &%04x, size %-3i from &%04x" % ('READ' if access == PbConstants.PB_MEM_READ else 'WRITE',
+                                                            address, size,
+                                                            pb.reg_read(PbConstants.PB_6502_REG_PC)))
+
+    bbc = BBC()
+
+    # Trace all the ROM execution
+    #bbc.pb.hook_add(PbConstants.PB_HOOK_CODE, trace, begin=0x8000, end=0xC000)
+
+    # Report memory reads and writes around PAGE
+    #bbc.pb.hook_add(PbConstants.PB_HOOK_MEM_READ | PbConstants.PB_HOOK_MEM_WRITE, mem_hook, begin=0xe00, end=0xe01)
+
+    # Report memory reads and writes anywhere between the PAGE and HIMEM (video memory).
+    #bbc.pb.hook_add(PbConstants.PB_HOOK_MEM_READ | PbConstants.PB_HOOK_MEM_WRITE, mem_hook, begin=0xe00, end=0x7c00)
+
+    interface_classes = [
+            OSWRCHtty,
+            OSRDCHtty,
+            OSCLIquit,
+            OSBYTEversion,
+            OSWORDtty,
+            OSBYTEtty,
+        ] + host_fs_interfaces('.')
+    try:
+        syscalls = []
+        interfaces = []
+        for cls in interface_classes:
+            interface = cls()
+            interface.start()
+            interfaces.append(interface)
+            def hook(pb, address, size, user_data, interface=interface):
+                try:
+                    #print("Call interface %r" % (interface,))
+                    handled = interface.call(pb)
+                    #print("  handled = %r" % (handled,))
+                    if handled:
+                        pb.regs.pc = pb.dispatch.pullWord() + 1
+                except BBCError as exc:
+                    pb.memory.writeBytes(0x100, bytearray([0, exc.errnum]))
+                    pb.memory.writeBytes(0x100 + 2, bytearray(exc.errmess.encode('latin-1')))
+                    pb.regs.pc = 0x100
+
+            syscalls.append((interface.code, hook))
+
+        bbc.go(syscalls)
+
+    except InputEOFError as exc:
+        print("\nEOF")
+
+    finally:
+        for interfaces in reversed(interfaces):
+            interface.stop()
+
 
 if __name__ == "__main__":
-    OS_WRCH_LOC = 0xe0a4
-    OS_RDCH_LOC = 0xdec5
-    syscalls = [ (OS_WRCH_LOC, OS_WRCH),
-                 (OS_RDCH_LOC, OS_RDCH) ]
-    bbc = BBC()
-    bbc.go(syscalls)
+    main()

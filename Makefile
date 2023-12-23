@@ -15,7 +15,7 @@ coverage_unittest_disassemble:
 	./coverage_run.py --module DisassembleTest
 
 coverage_inttest_pybeebu:
-	./coverage_run.py --module PyBeebU < /dev/null
+	./coverage_run.py --module PyBeeb < /dev/null
 
 coverage: \
 	   coverage_clear \
