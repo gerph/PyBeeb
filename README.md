@@ -13,7 +13,7 @@ use, or modify the behaviour, in Python.
 
 ## Usage
 
-The emulator can be run with `python PyBeeb.py`. This will start the emulator
+The emulator can be run with `python RunBeeb.py`. This will start the emulator
 running, booting the BBC MOS and entering BBC BASIC. The emulator provides
 default hooks to allow the terminal input to be passed to the keyboard reading
 code, VDU output will be written to the terminal output.
@@ -57,7 +57,7 @@ with the emulator. The emulation system, and its hooks, are based around the
 spirit of the Unicorn engine emulator. Hooks can be registered for code
 execution, and memory accesses.
 
-The `PyBeeb.py` tool contains commented out code which can be enabled to use
+The `RunBeeb.py` tool contains commented out code which can be enabled to use
 these hooks directly. The example hooks allow code to be traced - each instruction
 executed will be disassembled and displayed - and to report on memory accesses
 in different areas of memory.
@@ -68,6 +68,6 @@ contains base classess which interpret the interfaces in the `base` module, and
 concrete classes within the `hostfs` and `hosttty` modules. These latter modules
 provide the file system and terminal I/O.
 
-The `PyBeeb.py` tool includes two simple examples of these extensions, to provide
+The `RunBeeb.py` tool includes two simple examples of these extensions, to provide
 more information in `*FX0` (the system version), and to allow the emulator to be
 quit with `*Quit`.

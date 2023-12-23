@@ -16,6 +16,7 @@ class MockMapper(object):
     def writeByte(self, address, value):
         self.lastByteWritten = (address, value)
 
+
 class MemoryTestsSimple(unittest.TestCase):
     def setUp(self):
         self.mem = pybeeb.CPU.Memory.Memory()
@@ -29,11 +30,12 @@ class MemoryTestsSimple(unittest.TestCase):
             self.mem.writeByte(address, 1)
             self.assertEqual(self.mem.readByte(address), 1)
 
+
 class MappingTestSimple(unittest.TestCase):
     def setUp(self):
         self.mem = pybeeb.CPU.Memory.Memory()
         self.mapper = MockMapper()
-        self.mem.map( (0, 0x100), self.mapper)
+        self.mem.map((0, 0xFF), self.mapper)
 
     def test_readInRange(self):
         for address in range(0x100):
@@ -55,6 +57,7 @@ class MappingTestSimple(unittest.TestCase):
             self.mem.writeByte(address, (address & 0xff) ^ 0xff)
             self.assertEqual(self.mapper.lastByteWritten, (None, None))
 
+
 class OverlaidMappingTests(unittest.TestCase):
     def setUp(self):
         self.mem = pybeeb.CPU.Memory.Memory()
@@ -62,8 +65,8 @@ class OverlaidMappingTests(unittest.TestCase):
         self.firstMapper = MockMapper()
         self.secondMapper = MockMapper()
 
-        self.mem.map( (0, 0x200), self.firstMapper)
-        self.mem.map( (0x100, 0x300), self.secondMapper)
+        self.mem.map((0, 0x200), self.firstMapper)
+        self.mem.map((0x100, 0x300), self.secondMapper)
 
     def test_readInFirstMap(self):
         for address in range(0, 0x100):
@@ -103,7 +106,7 @@ class OverlaidMappingTests(unittest.TestCase):
 
 
 def main():
-    unittest.main()
+    unittest.main(module=__name__)
 
 
 if __name__ == '__main__':
