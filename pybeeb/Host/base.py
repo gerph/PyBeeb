@@ -258,21 +258,21 @@ class OSCLI(OSInterface):
         while cli[0:1] in (b'*', b' '):
             cli = cli[1:]
 
-        cmd = []
+        cmd = bytearray()
         args = ''
         abbrev = False
         for index, c in enumerate(cli):
-            if c == ' ':
+            if c == 32:
                 args = cli[index + 1:]
                 break
-            if c == '.':
+            if c == ord('.'):
                 args = cli[index + 1:]
                 abbrev = True
                 break
-            cmd.append(c.upper())
+            cmd.append(c)
 
         dispatch = None
-        command = ''.join(cmd)
+        command = bytes(cmd).upper()
         #print("CMD: %r (abbrev=%s), args: %r" % (command, abbrev, args))
         if abbrev:
             if not command:
