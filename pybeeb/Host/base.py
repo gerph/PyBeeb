@@ -75,7 +75,10 @@ class BBCError(Exception):
 
     def __init__(self, errnum, errmess):
         self.errnum = errnum
-        self.errmess = errmess
+        if isinstance(errmess, bytes):
+            self.errmess = errmess.decode('latin-1')
+        else:
+            self.errmess = errmess
         super(BBCError, self).__init__(errmess, errnum)
 
 
@@ -261,7 +264,8 @@ class OSCLI(OSInterface):
         cmd = bytearray()
         args = ''
         abbrev = False
-        for index, c in enumerate(cli):
+        for index, c in enumerate(bytearray(cli)):
+            #print("cli = %r, c = %r" % (cli, c))
             if c == 32:
                 args = cli[index + 1:]
                 break

@@ -34,7 +34,7 @@ class DirectoryEntry(object):
     default_loadaddr = 0x00000000
     default_execaddr = 0x00000000
     default_attributes = 0b00110011
-    hexdigits = '0123456789abcdef'
+    hexdigits = b'0123456789abcdef'
 
     stat_read_mask = stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH
     stat_write_mask = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
@@ -52,7 +52,7 @@ class DirectoryEntry(object):
             name = self.fs.decode_from_filesystem(native_name)
             explicit_loadexec = False
             if len(name) > 18 and \
-               name[-9] == ',' and name[-18] == ',' and \
+               name[-9:-8] == b',' and name[-18:-17] == b',' and \
                all(c in self.hexdigits for c in name[-8:]) and \
                all(c in self.hexdigits for c in name[-17:-9]):
                 # 1+8+1+8 for ,llllllll,eeeeeeee
@@ -67,13 +67,13 @@ class DirectoryEntry(object):
                 ext = None
                 #print("Checking name %r" % (name,))
                 if len(name) > 4 and \
-                   name[-4] == ',' and all(c in self.hexdigits for c in name[-3:]):
+                   name[-4:-3] == b',' and all(c in self.hexdigits for c in name[-3:]):
                     ext = name[-4:]
 
                 elif len(name) > 4 and \
-                   name[-4] == '/':
+                   name[-4:-3] == b'/':
                     # The name has already been decoded from the filesystem, so . => /.
-                    ext = '.' + name[-3:]
+                    ext = b'.' + name[-3:]
 
                 if ext:
                     loadexec = self.fs.loadexec_from_extension.get(ext, None)
@@ -84,7 +84,7 @@ class DirectoryEntry(object):
 
         self.name = name
         self.fullpath_native = None
-        self.fullpath = self.fs.join(parent.fullpath, name)
+        self.fullpath = self.fs.join(parent.fullpath, self.name)
         if parent is not None:
             self.fullpath_native = os.path.join(parent.fullpath_native, native_name)
 
@@ -110,7 +110,7 @@ class DirectoryEntry(object):
 
         else:
             # When we don't know the filetype, we leave it set to 0
-            if native_name == '$':
+            if native_name == b'$':
                 # This is the root entry, so fake as a directory
                 self.objtype = 2
             else:
@@ -217,13 +217,23 @@ class Directory(object):
         if parent:
             self.fullpath = self.fs.join(parent.fullpath, name)
         else:
-            self.fullpath = self.fs.join("$", name)
+            self.fullpath = self.fs.join(b'$', name)
 
         if parent:
-            self.fullpath_native = os.path.join(parent.fullpath_native, name)
+            self.fullpath_native = os.path.join(parent.fullpath_native, name.decode('latin-1'))
         else:
             self.fullpath_native = self.fs.basedir
         self._files = None
+
+    def __repr__(self):
+        if self._files:
+            files = "files=%s" % (len(self._files),)
+        else:
+            files = "files uncached"
+        return "<{}(name={!r}, native={!r}, {}>".format(self.__class__.__name__,
+                                                                self.fullpath,
+                                                                self.fullpath_native,
+                                                                files)
 
     @property
     def files(self):
@@ -233,10 +243,10 @@ class Directory(object):
             except OSError as exc:
                 if exc.errno == errno.ENOENT:
                     # FIXME: Find the error number
-                  raise BBCFileNotFoundError(0, "File '%s' not found" % (self.name,))
+                  raise BBCFileNotFoundError(0, b"File '%s' not found" % (self.name,))
                 if exc.errno == errno.ENOTDIR:
                     # FIXME: Find the error number
-                  raise BBCDirNotFoundError(0, "Directory '%s' not found" % (self.name,))
+                  raise BBCDirNotFoundError(0, b"Directory '%s' not found" % (self.name,))
                 raise
 
             files = {}
@@ -258,7 +268,7 @@ class Directory(object):
         dirent = self.files.get(name.lower(), None)
         if dirent is None:
             # FIXME: Find the error number
-            raise BBCFileNotFoundError(0, "File '%s' not found" % (name,))
+            raise BBCFileNotFoundError(0, b"File '%s' not found" % (name,))
         return dirent
 
 
@@ -321,21 +331,21 @@ class FS(object):
     An interface for accessing the filesystem.
     """
     loadexec_to_extension = {
-            (None, 0xFFFF8023): '.bas',
-            (None, 0xFFFF801F): '.bas',
-            (0xFFFF8000, 0xFFFF8000): '.rom',
-            (0xFFFFFFFF, 0xFFFFFFFF): '.txt',
+            (None, 0xFFFF8023): b'.bas',
+            (None, 0xFFFF801F): b'.bas',
+            (0xFFFF8000, 0xFFFF8000): b'.rom',
+            (0xFFFFFFFF, 0xFFFFFFFF): b'.txt',
         }
     loadexec_from_extension = {
-            '.bas': (0xFFFF0E00, 0xFFFF8023),
-            '.rom': (0xFFFF8000, 0xFFFF8000),
-            '.txt': (0xFFFFFFFF, 0xFFFFFFFF),
+            b'.bas': (0xFFFF0E00, 0xFFFF8023),
+            b'.rom': (0xFFFF8000, 0xFFFF8000),
+            b'.txt': (0xFFFFFFFF, 0xFFFFFFFF),
 
             # NFS style RISC OS extensions
-            ',ffb': (0xFFFF0E00, 0xFFFF8023),   # Tokenised BBC BASIC
-            ',fd1': (0xFFFFFFFF, 0xFFFFFFFF),   # Detokenised BBC BASIC
-            ',fff': (0xFFFFFFFF, 0xFFFFFFFF),   # Text
-            '.bbc': (0xFFFF8000, 0xFFFF8000),   # BBC ROM
+            b',ffb': (0xFFFF0E00, 0xFFFF8023),   # Tokenised BBC BASIC
+            b',fd1': (0xFFFFFFFF, 0xFFFFFFFF),   # Detokenised BBC BASIC
+            b',fff': (0xFFFFFFFF, 0xFFFFFFFF),   # Text
+            b'.bbc': (0xFFFF8000, 0xFFFF8000),   # BBC ROM
         }
 
     open_loadaddr = 0xFFFFFFFF
@@ -347,7 +357,7 @@ class FS(object):
         self.cached = {}
         self.filehandles = {}
         self._next_filehandle = self.filehandle_max
-        self._cwd = '$'
+        self._cwd = b'$'
 
         try:
             self.native_uid = os.getuid()
@@ -360,38 +370,48 @@ class FS(object):
     def encode_to_filesystem(self, filename):
         """
         Convert from a unicode string to something in the host filesystem.
+
+        @param filename:    BBC filename (latin-1)
+
+        @return:            Filesystem filename (unicode)
         """
 
-        # FIXME: Perform some conversion on the character set
-
         # In the filesystem a '/' is reported as a '.'
-        filename = filename.replace('/', '.')
+        filename = filename.replace(b'/', b'.')
+
+        # Convert the filename into unicode format
+        filename = filename.decode('latin-1')
 
         return filename
 
     def decode_from_filesystem(self, filename):
         """
         Convert from a host filesystem name to a unicode string for BBC.
+
+        @param filename:    Filesystem filename (unicode)
+
+        @return:            BBC filename (latin-1)
         """
 
-        # FIXME: Perform some conversion on the character set
+        # Convert the filename into encoded format
+        filename = filename.encode('latin-1')
 
         # In the filesystem a '/' is reported as a '.'
-        filename = filename.replace('.', '/')
+        filename = filename.replace(b'.', b'/')
 
         return filename
 
     def join(self, *paths):
-        parts = ['$']
+        parts = [b'$']
         for path in paths:
-            if path is None or path == '$':
-                parts = ['$']
+            if path is None or path == b'$':
+                parts = [b'$']
             else:
                 parts.append(path)
-        if '^' in parts:
+        if b'^' in parts:
             # Only go through the process of reconciling '^' if one was present
-            return self.canonicalise('.'.join(parts))
-        return '.'.join(parts)
+            return self.canonicalise(b'.'.join(parts))
+        return b'.'.join(parts)
 
     def generate_native_filename(self, name, loadaddr, execaddr, objtype):
         """
@@ -399,46 +419,44 @@ class FS(object):
         or the load/exec changed
         """
 
+        if objtype != 2:
+            # Certain load/exec extensions are able to be converted through the mapping
+            ext = self.loadexec_to_extension.get((loadaddr, execaddr), None)
+            if not ext:
+                ext = self.loadexec_to_extension.get((loadaddr, None), None)
+                if not ext:
+                    ext = self.loadexec_to_extension.get((None, execaddr), None)
+            if ext:
+                #print("ext name : %s / %s" % (new_name, ext))
+                name = b"%s%s" % (name, ext)
+            else:
+                # Load and exec address are required, so we need to put the long extension on
+                # Ensure the load and exec are the unsigned values:
+                if loadaddr < 0:
+                    loadaddr += (1<<32)
+                loadaddr = loadaddr & 0xFFFFFFFF
+                if execaddr < 0:
+                    execaddr += (1<<32)
+                execaddr = execaddr & 0xFFFFFFFF
+
+                name = b'%s,%08x,%08x' % (name, loadaddr, execaddr)
+
         # Do the basic conversion
         new_name = self.encode_to_filesystem(name)
-
-        if objtype == 2:
-            return new_name
-
-        # Certain load/exec extensions are able to be converted through the mapping
-        ext = self.loadexec_to_extension.get((loadaddr, execaddr), None)
-        if not ext:
-            ext = self.loadexec_to_extension.get((loadaddr, None), None)
-            if not ext:
-                ext = self.loadexec_to_extension.get((None, execaddr), None)
-        if ext:
-            #print("ext name : %s / %s" % (new_name, ext))
-            new_name = "%s%s" % (new_name, ext)
-        else:
-            # Load and exec address are required, so we need to put the long extension on
-            # Ensure the load and exec are the unsigned values:
-            if loadaddr < 0:
-                loadaddr += (1<<32)
-            loadaddr = loadaddr & 0xFFFFFFFF
-            if execaddr < 0:
-                execaddr += (1<<32)
-            execaddr = execaddr & 0xFFFFFFFF
-
-            new_name = '%s,%08x,%08x' % (new_name, loadaddr, execaddr)
 
         return new_name
 
     def split(self, path):
         parts = []
-        for part in path.split('.'):
-            if part == '$':
-                parts = ['$']
-            elif part == '^':
-                if len(parts) > 1 and part[-1] != '^':
-                    if part[-1] != '$':
+        for part in path.split(b'.'):
+            if part == b'$':
+                parts = [b'$']
+            elif part == b'^':
+                if len(parts) > 1 and part[-1] != b'^':
+                    if part[-1] != b'$':
                         parts = parts[:-1]
                 else:
-                    parts.append('^')
+                    parts.append(b'^')
             else:
                 parts.append(part)
         return parts
@@ -449,19 +467,19 @@ class FS(object):
         if not path_parts:
             # This is the CWD
             parts = cwd_parts
-        elif path_parts and path_parts[0] == '$':
+        elif path_parts and path_parts[0] == b'$':
             # This is already rooted
             parts = path_parts
         else:
-            while path_parts and path_parts[0] == '^':
+            while path_parts and path_parts[0] == b'^':
                 if cwd_parts:
                     cwd_parts = cwd_parts[:-1]
                 path_parts = path_parts[1:]
             if cwd_parts:
                 parts = cwd_parts + path_parts
             else:
-                parts = ['$']
-        return '.'.join(parts)
+                parts = [b'$']
+        return b'.'.join(parts)
 
     @property
     def cwd(self):
@@ -472,7 +490,7 @@ class FS(object):
         dirent = self.find(value)
         if dirent.objtype != 2:
             # FIXME: Find the error number
-            raise BBCDirNotFoundError(0, "'%s' is not a directory" % (dirent.fullpath,))
+            raise BBCDirNotFoundError(0, b"'%s' is not a directory" % (dirent.fullpath,))
         self._cwd = dirent.fullpath
 
     def dirname(self, path):
@@ -487,9 +505,9 @@ class FS(object):
 
     def splitname(self, path):
         parts = self.split(path)
-        dirname = '.'.join(parts[:-1])
+        dirname = b'.'.join(parts[:-1])
         if not dirname:
-            dirname = "$"
+            dirname = b'$'
         leafname = parts[-1]
         return (dirname, leafname)
 
@@ -506,7 +524,7 @@ class FS(object):
         if dir is None:
             (dirname, leafname) = self.splitname(path)
             #print("  dirname=%s leafname=%s" % (dirname, leafname))
-            if leafname != '$':
+            if leafname != b'$':
                 parent = self.dir(dirname)
                 dir = Directory(self, leafname, parent)
             else:
@@ -517,15 +535,18 @@ class FS(object):
 
     def find(self, path):
         path = self.canonicalise(path)
+        #print("find: path = %r" % (path,))
         (dirname, leafname) = self.splitname(path)
+        #print("find: dirname = %r, leafname = %r" % (dirname, leafname))
         dir = self.dir(dirname)
+        #print("find: dir = %r" % (dir,))
         dirent = dir[leafname]
         return dirent
 
     def allocate_filehandle(self, bfh):
         if not self._next_filehandle:
             # FIXME: Fix error number
-            raise BBCNoHandlesError(0, "No more file handles")
+            raise BBCNoHandlesError(0, b"No more file handles")
 
         bfh.handle = self._next_filehandle
         self.filehandles[bfh.handle] = bfh
@@ -559,7 +580,7 @@ class FS(object):
         bfh = self.filehandles.get(handle, None)
         if not bfh:
             # FIXME: Fix error number
-            raise BBCBadHandleError(0, "Bad file handle")
+            raise BBCBadHandleError(0, b"Bad file handle")
         return bfh
 
     def filehandle_range(self):
@@ -644,7 +665,7 @@ class FS(object):
     def close(self, handle):
         if handle == 0:
             # FIXME: Could make this work as on the BBC
-            raise BBCError(0, "Not closing all files")
+            raise BBCError(0, b"Not closing all files")
 
         bfh = self.find_filehandle(handle)
         bfh.close()

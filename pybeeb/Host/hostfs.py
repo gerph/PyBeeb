@@ -112,14 +112,15 @@ class OSFILEhost(OSFILE):
                     Tuple of (info_type, info_load, info_exec, info_length, info_attr) if handled
         """
         handle = None
+        #print("Load: %r" % (filename,))
         try:
             (info_type, info_load, info_exec, info_length, info_attr) = self.fs.fileinfo(filename)
             if info_type == 0:
                 # FIXME: Error number
-                raise BBCFileNotFoundError(0, "File not found")
+                raise BBCFileNotFoundError(0, b"File '%s' not found" % (filename,))
             if info_type == 2:
                 # FIXME: Error number
-                raise BBCFileNotFoundError(0, "Is a directory")
+                raise BBCFileNotFoundError(0, b"'%s' is a directory" % (filename,))
 
             if load_address is None:
                 load_address = info_load & 0xFFFF
@@ -192,7 +193,7 @@ class OSBGEThost(OSBGET):
         data = self.fs.read(fh, 1)
         if not data:
             return -1
-        return bytearray(data[0])[0]
+        return bytearray(data)[0]
 
 
 class OSBPUThost(OSBPUT):
@@ -393,14 +394,14 @@ class OSFSChost(OSFSC):
         longest_name = max(len(dirent.name) for dirent in files.values())
         longest_name = max(10, longest_name)
 
-        pb.mos.write("Dir.   %s\n\n" % (dir.fullpath,))
+        pb.mos.write("Dir.   %s\n\n" % (dir.fullpath.decode('latin-1'),))
 
         ordered = sorted(files.items())
         width = 40
         # FIXME: Make the width configurable (or read from the mode vars?)
         x = 0
         for key, dirent in ordered:
-            text = "%-*s  " % (longest_name, dirent.name)
+            text = "%-*s  " % (longest_name, dirent.name.decode('latin-1'))
             attr = []
             if dirent.objtype == 2:
                 attr.append('D')
@@ -491,7 +492,7 @@ class OSCLIhost(OSCLI):
         super(OSCLIhost, self).__init__()
         self.fs = fs
 
-        self.commands_dispatch['DIR'] = self.cmd_dir
+        self.commands_dispatch[b'DIR'] = self.cmd_dir
 
     def cmd_dir(self, args, pb):
         self.fs.cwd = args

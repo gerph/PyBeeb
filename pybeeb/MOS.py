@@ -5,6 +5,13 @@ Python interfaces to allow calling the MOS interfaces.
 from .Emulation import PbConstants, StackOverflowException, StackUnderflowException
 
 
+# Python 2/3 support
+try:
+    unicode
+except:
+    unicode = str
+
+
 class ExecutionComplete(Exception):
     pass
 
@@ -99,19 +106,24 @@ class MOS(object):
     def write(self, msg):
         if isinstance(msg, bytes):
             data = bytearray(msg)
-        elif isinstance(msg, str):
+        elif isinstance(msg, (str, unicode)):
             # Let's use latin-1 as our encoding for now.
             data = msg.encode('latin-1')
             data = bytearray(data)
+        elif isinstance(msg, bytearray):
+            data = msg
         for c in data:
             self.osasci(c)
 
     def writeraw(self, msg):
         if isinstance(msg, bytes):
             data = bytearray(msg)
-        elif isinstance(msg, str):
+        elif isinstance(msg, (str, unicode)):
             # Let's use latin-1 as our encoding for now.
             data = msg.encode('latin-1')
             data = bytearray(data)
+        elif isinstance(msg, bytearray):
+            data = msg
+
         for c in data:
             self.oswrch(c)
