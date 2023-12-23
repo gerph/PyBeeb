@@ -2,7 +2,7 @@
 Implementations of the OS interfaces which communicate with the host (file system specific)
 """
 
-from .base import OSInterface, OSFILE, OSFIND, OSBGET, OSBPUT, OSARGS, OSFSC, OSBYTE, BBCError
+from .base import OSInterface, OSFILE, OSFIND, OSBGET, OSBPUT, OSARGS, OSFSC, OSBYTE, OSCLI, BBCError
 from .fsbbc import FS, BBCFileNotFoundError, open_in, open_out
 
 
@@ -485,6 +485,19 @@ class OSBYTEhost(OSBYTE):
         return True
 
 
+class OSCLIhost(OSCLI):
+
+    def __init__(self, fs):
+        super(OSCLIhost, self).__init__()
+        self.fs = fs
+
+        self.commands_dispatch['DIR'] = self.cmd_dir
+
+    def cmd_dir(self, args, pb):
+        self.fs.cwd = args
+        return True
+
+
 def host_fs_interfaces(basedir):
     """
     Construct a list of OS interfaces for filesystems, using a host base directory.
@@ -498,4 +511,5 @@ def host_fs_interfaces(basedir):
             lambda: OSARGShost(fs),
             lambda: OSFSChost(fs),
             lambda: OSBYTEhost(fs),
+            lambda: OSCLIhost(fs),
         ]

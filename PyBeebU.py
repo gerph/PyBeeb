@@ -23,7 +23,7 @@ class BBC(object):
         try:
             # Register the syscall execution entry points
             hooks = []
-            for addr, func in syscalls.items():
+            for addr, func in syscalls:
                 hooks.append(self.pb.hook_add(PbConstants.PB_HOOK_CODE,
                                               func, begin=addr, end=addr + 1))
 
@@ -36,10 +36,13 @@ class BBC(object):
 
 class OSCLIquit(OSCLI):
 
-    def command(self, command, args):
-        if command == b'QUIT':
-            sys.exit()
-        return False
+    def __init__(self, *args, **kwargs):
+        super(OSCLIquit, self).__init__(*args, **kwargs)
+
+        self.commands_dispatch['QUIT'] = self.cmd_quit
+
+    def cmd_quit(self, args, pb):
+        sys.exit()
 
 
 class OSBYTEversion(OSBYTE):
@@ -49,7 +52,7 @@ class OSBYTEversion(OSBYTE):
 
         self.dispatch[(0x00, 0x00)] = self.osbyte_osversion_error
 
-    def osbyte_osversion_error(self, a, x, y, regs, memory):
+    def osbyte_osversion_error(self, a, x, y, pb):
         raise BBCError(247, "OS 1.20 (PyBeeb)")
 
 
@@ -87,7 +90,7 @@ def main():
             OSBYTEtty,
         ] + host_fs_interfaces('.')
     try:
-        syscalls = {}
+        syscalls = []
         interfaces = []
         for cls in interface_classes:
             interface = cls()
@@ -105,7 +108,7 @@ def main():
                     pb.memory.writeBytes(0x100 + 2, bytearray(exc.errmess.encode('latin-1')))
                     pb.regs.pc = 0x100
 
-            syscalls[interface.code] = hook
+            syscalls.append((interface.code, hook))
 
         bbc.go(syscalls)
 

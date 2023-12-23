@@ -55,6 +55,8 @@ class BBC(object):
 
     def go(self, syscalls):
         instr = 0
+        # NOTE: We only support a single handler per address.
+        syscalls = dict(syscalls)
 
         while True:
             if self.pcTrace:
@@ -76,7 +78,7 @@ def OS_RDCH(reg,mem): print "OS_RDCH" # Could inject keypresses here maybe?
 if __name__ == "__main__":
     OS_WRCH_LOC = 0xe0a4
     OS_RDCH_LOC = 0xdec5
-    syscalls = { OS_WRCH_LOC : OS_WRCH,
-                 OS_RDCH_LOC : OS_RDCH }
+    syscalls = [ (OS_WRCH_LOC, OS_WRCH),
+                 (OS_RDCH_LOC, OS_RDCH) ]
     bbc = BBC()
     bbc.go(syscalls)

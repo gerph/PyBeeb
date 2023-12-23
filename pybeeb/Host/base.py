@@ -242,20 +242,55 @@ class OSCLI(OSInterface):
     code = 0xDF89
     vector = 0x0208
 
+    def __init__(self):
+        super(OSCLI, self).__init__()
+
+        # The command dispatch table can be used to make it easier
+        # to handle individual commands. The key is an upper case
+        # command name, and the value is a method which should be
+        # called to handle it. The method will be called as:
+        #   method(args, pb)
+        self.commands_dispatch = {}
+
     def call(self, pb):
         xy = pb.regs.x | (pb.regs.y << 8)
         cli = pb.memory.readString(xy)
-        while cli[0:1] == b'*':
+        while cli[0:1] in (b'*', b' '):
             cli = cli[1:]
-        if b' ' in cli:
-            (command, args) = cli.split(b' ', 1)
+
+        cmd = []
+        args = ''
+        abbrev = False
+        for index, c in enumerate(cli):
+            if c == ' ':
+                args = cli[index + 1:]
+                break
+            if c == '.':
+                args = cli[index + 1:]
+                abbrev = True
+                break
+            cmd.append(c.upper())
+
+        dispatch = None
+        command = ''.join(cmd)
+        #print("CMD: %r (abbrev=%s), args: %r" % (command, abbrev, args))
+        if abbrev:
+            if not command:
+                # Always give up on the `*.` command, so that it's
+                # passed on to the OS to be handled as *CAT through
+                # OSFSC.
+                return False
+            for key, func in self.commands_dispatch.items():
+                if key.startswith(command):
+                    dispatch = func
         else:
-            command = cli
-            args = b''
+            dispatch = self.commands_dispatch.get(command, None)
+        if dispatch:
+            return dispatch(args, pb)
 
-        return self.command(command.upper(), args)
+        return self.command(command, args, pb)
 
-    def command(self, command, args):
+    def command(self, command, args, pb):
         return False
 
 

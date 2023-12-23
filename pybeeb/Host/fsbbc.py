@@ -18,6 +18,10 @@ class BBCFileNotFoundError(BBCError):
     pass
 
 
+class BBCDirNotFoundError(BBCFileNotFoundError):
+    pass
+
+
 class BBCNoHandlesError(BBCError):
     pass
 
@@ -80,6 +84,7 @@ class DirectoryEntry(object):
 
         self.name = name
         self.fullpath_native = None
+        self.fullpath = self.fs.join(parent.fullpath, name)
         if parent is not None:
             self.fullpath_native = os.path.join(parent.fullpath_native, native_name)
 
@@ -229,6 +234,10 @@ class Directory(object):
                 if exc.errno == errno.ENOENT:
                     # FIXME: Find the error number
                   raise BBCFileNotFoundError(0, "File '%s' not found" % (self.name,))
+                if exc.errno == errno.ENOTDIR:
+                    # FIXME: Find the error number
+                  raise BBCDirNotFoundError(0, "Directory '%s' not found" % (self.name,))
+                raise
 
             files = {}
             #print("Files in %r (%r)" % (self.fullpath, self.fullpath_native))
@@ -429,7 +438,7 @@ class FS(object):
                     if part[-1] != '$':
                         parts = parts[:-1]
                 else:
-                    part.append('^')
+                    parts.append('^')
             else:
                 parts.append(part)
         return parts
@@ -460,7 +469,11 @@ class FS(object):
 
     @cwd.setter
     def cwd(self, value):
-        self._cwd = self.canonicalise(value)
+        dirent = self.find(value)
+        if dirent.objtype != 2:
+            # FIXME: Find the error number
+            raise BBCDirNotFoundError(0, "'%s' is not a directory" % (dirent.fullpath,))
+        self._cwd = dirent.fullpath
 
     def dirname(self, path):
         parts = self.split(path)
