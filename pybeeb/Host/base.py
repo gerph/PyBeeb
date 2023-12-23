@@ -562,14 +562,14 @@ class OSARGS(OSInterface):
 
             elif op == 0x01:
                 # Read CLI args
-                result = self.read_cli_args(regs, memory)
+                result = self.read_cli_args(pb)
                 handled = result is not None
                 if handled:
                     pb.memory.writeLongWord(address, result)
 
             elif op == 0xFF:
                 # Flush all files
-                handled = self.flush_all_files(regs, memory)
+                handled = self.flush_all_files(pb)
 
         else:
             # Filehandle supplied
@@ -787,8 +787,8 @@ class OSGBPB(OSInterface):
         self.dispatch[0x03] = self.call_get_bytes
         self.dispatch[0x04] = self.call_get_bytes
         self.dispatch[0x05] = self.call_get_media_title
-        self.dispatch[0x06] = lambda op, address, regs, memory: self.call_get_csd_lib(op, address, regs, memory, csd=True)
-        self.dispatch[0x07] = lambda op, address, regs, memory: self.call_get_csd_lib(op, address, regs, memory, csd=False)
+        self.dispatch[0x06] = lambda op, address, pb: self.call_get_csd_lib(op, address, pb, csd=True)
+        self.dispatch[0x07] = lambda op, address, pb: self.call_get_csd_lib(op, address, pb, csd=False)
         self.dispatch[0x08] = self.call_get_filenames
         self.dispatch_default = self.osgbpb
 
@@ -1038,7 +1038,7 @@ class OSGBPB(OSInterface):
 
 
 class OSFSC(OSInterface):
-    code = 0xFFB1
+    code = 0xF1B1
     vector = 0x021E
 
     def __init__(self):
@@ -1126,8 +1126,8 @@ class OSFSC(OSInterface):
         """
         *Cat has been issued
         """
-        cat = pb.memory.readString(address)
-        handled = self.cat(cat, pb)
+        path = pb.memory.readString(address)
+        handled = self.cat(path, pb)
         return handled
 
     def call_fs_starting(self, op, address, pb):

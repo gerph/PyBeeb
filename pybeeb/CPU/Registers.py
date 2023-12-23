@@ -4,6 +4,9 @@ Created on 12 Oct 2011
 @author: chris.whitworth
 '''
 
+import sys
+
+
 class RegisterBank(object):
 
     def __init__(self):
@@ -58,6 +61,46 @@ class RegisterBank(object):
         self.nextPC = 0
         self.sp = 0xff
         self.setPS(0)
+
+    def copy(self):
+        """
+        Create a copy of the current register bank.
+        """
+        new = self.__class__()
+        new.pc = self.pc
+        new.sp = self.sp
+        new.a = self.a
+        new.x = self.x
+        new.y = self.y
+        new.nextPC = self.nextPC
+
+        new.carry = self.carry
+        new.zero = self.zero
+        new.int = self.int
+        new.dec = self.dec
+        new.brk = self.brk
+        new.overflow = self.overflow
+        new.negative = self.negative
+        return new
+
+    def restore(self, old):
+        """
+        Restore the state to that of an old register bank.
+        """
+        self.pc = old.pc
+        self.sp = old.sp
+        self.a = old.a
+        self.x = old.x
+        self.y = old.y
+        self.nextPC = old.nextPC
+
+        self.carry = old.carry
+        self.zero = old.zero
+        self.int = old.int
+        self.dec = old.dec
+        self.brk = old.brk
+        self.overflow = old.overflow
+        self.negative = old.negative
 
     def status(self):
         sys.stdout.write("%s%s.%s%s%s%s%s" % (

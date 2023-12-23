@@ -2,9 +2,9 @@
 Interfaces to the host filesystem.
 """
 
+import errno
 import os
 import stat
-import sys
 
 from .base import BBCError
 
@@ -38,7 +38,6 @@ class DirectoryEntry(object):
     def __init__(self, fs, native_name, parent):
         self.fs = fs
         self.native_name = native_name or ''
-        self.name = native_name
         self.parent = parent
 
         self.loadaddr = self.default_loadaddr
@@ -224,7 +223,12 @@ class Directory(object):
     @property
     def files(self):
         if not self._files:
-            filenames = os.listdir(self.fullpath_native)
+            try:
+                filenames = os.listdir(self.fullpath_native)
+            except OSError as exc:
+                if exc.errno == errno.ENOENT:
+                    # FIXME: Find the error number
+                  raise BBCFileNotFoundError(0, "File '%s' not found" % (self.name,))
 
             files = {}
             #print("Files in %r (%r)" % (self.fullpath, self.fullpath_native))
@@ -334,6 +338,7 @@ class FS(object):
         self.cached = {}
         self.filehandles = {}
         self._next_filehandle = self.filehandle_max
+        self._cwd = '$'
 
         try:
             self.native_uid = os.getuid()
@@ -415,20 +420,47 @@ class FS(object):
         return new_name
 
     def split(self, path):
-        parts = ['$']
+        parts = []
         for part in path.split('.'):
             if part == '$':
                 parts = ['$']
             elif part == '^':
-                if len(parts) > 1:
-                    parts = parts[:-1]
+                if len(parts) > 1 and part[-1] != '^':
+                    if part[-1] != '$':
+                        parts = parts[:-1]
+                else:
+                    part.append('^')
             else:
                 parts.append(part)
         return parts
 
     def canonicalise(self, path):
-        parts = self.split(path)
+        cwd_parts = self.split(self._cwd)
+        path_parts = self.split(path)
+        if not path_parts:
+            # This is the CWD
+            parts = cwd_parts
+        elif path_parts and path_parts[0] == '$':
+            # This is already rooted
+            parts = path_parts
+        else:
+            while path_parts and path_parts[0] == '^':
+                if cwd_parts:
+                    cwd_parts = cwd_parts[:-1]
+                path_parts = path_parts[1:]
+            if cwd_parts:
+                parts = cwd_parts + path_parts
+            else:
+                parts = ['$']
         return '.'.join(parts)
+
+    @property
+    def cwd(self):
+        return self._cwd
+
+    @cwd.setter
+    def cwd(self, value):
+        self._cwd = self.canonicalise(value)
 
     def dirname(self, path):
         parts = self.split(path)
@@ -448,8 +480,14 @@ class FS(object):
         leafname = parts[-1]
         return (dirname, leafname)
 
-    def dir(self, path):
-        path = self.canonicalise(path)
+    def dir(self, path=None):
+        """
+        Get the directory object for a given directory.
+        """
+        if not path:
+            path = self.cwd
+        else:
+            path = self.canonicalise(path)
         #print("dir(%s)" % (path,))
         dir = self.cached.get(path.lower(), None)
         if dir is None:
@@ -465,6 +503,7 @@ class FS(object):
         return dir
 
     def find(self, path):
+        path = self.canonicalise(path)
         (dirname, leafname) = self.splitname(path)
         dir = self.dir(dirname)
         dirent = dir[leafname]
@@ -517,6 +556,7 @@ class FS(object):
         """
         Ensure a file exists, creating it if needed, renaming if not.
         """
+        path = self.canonicalise(path)
         (dirname, leafname) = self.splitname(path)
         dir = self.dir(dirname)
 

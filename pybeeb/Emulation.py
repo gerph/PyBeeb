@@ -7,13 +7,14 @@ modifications (or just remapping the variable names).
 
 import os.path
 
-from .CPU import Memory as Memory
-from .CPU import Registers as Registers
-from .CPU import AddressDispatcher as AddressDispatcher
-from .CPU import Writeback as Writeback
-from .CPU import ExecutionUnit as ExecutionUnit
-from .CPU import Dispatch as Dispatch
+from .CPU import Memory
+from .CPU import Registers
+from .CPU import AddressDispatcher
+from .CPU import Writeback
+from .CPU import ExecutionUnit
+from .CPU import Dispatch
 from .CPU import InstructionDecoder as Decoder
+from .CPU.ExecutionUnit import ExecutionException, StackOverflowException, StackUnderflowException
 from . import BBCMicro
 from .BBCMicro import System as BBCMicroSystem
 
@@ -180,10 +181,10 @@ class Disassemble6502Pb(Dissassemble6502):
         return self.pb.memory.readWord(address)
 
     def reg_x(self):
-        return self.pb.reg.x
+        return self.pb.regs.x
 
     def reg_y(self):
-        return self.pb.reg.y
+        return self.pb.regs.y
 
 
 class PbHook(object):
@@ -380,6 +381,7 @@ class Pb(object):
     * `pb.mem_write` - Write memory (Unicorn-like interface)
     * `pb.hook_add` - Add a hook to those that we will dispatch (code or memory access hooks)
     * `pb.hook_del` - Remove a registered hook.
+    * `pb.mos` - Access to MOS interfaces programatically
     """
     insts_filename = os.path.join(os.path.dirname(__file__), 'insts.csv')
 
@@ -400,6 +402,11 @@ class Pb(object):
 
         self.bbc = BBCMicro.System.Beeb(self.dispatch)
         self.dis = Disassemble6502Pb(self)
+
+        # Layering violation here, as MOS relies on reading our constants.
+        # FIXME: Refactor this
+        from .MOS import MOS
+        self.mos = MOS(self)
 
         self.executing = False
 
@@ -447,6 +454,8 @@ class Pb(object):
     def emu_start(self, begin, until, count=0):
         insts = 0
         self.executing = True
+        if begin is not None:
+            self.regs.pc = begin
         try:
             while self.executing and self.regs.pc != until:
                 #print "%s: PC: %s" % (insts, hex(self.regs.pc))

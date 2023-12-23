@@ -378,17 +378,65 @@ class OSFSChost(OSFSC):
         """
         return False
 
-    def cat(self, dir, pb):
+    def cat(self, path, pb):
         """
         *Cat issued
 
-        @param dir:     Directory name
+        @param path:    Directory name, or empty for CWD
         @param pb:      Emulator object, containing `regs` and `memory`
 
         @return:        True if handled,
                         False if not handled
         """
-        return False
+        dir = self.fs.dir(path)
+        files = dir.files
+        longest_name = max(len(dirent.name) for dirent in files.values())
+        longest_name = max(10, longest_name)
+
+        pb.mos.write("Dir.   %s\n\n" % (dir.fullpath,))
+
+        ordered = sorted(files.items())
+        width = 40
+        # FIXME: Make the width configurable (or read from the mode vars?)
+        x = 0
+        for key, dirent in ordered:
+            text = "%-*s  " % (longest_name, dirent.name)
+            attr = []
+            if dirent.objtype == 2:
+                attr.append('D')
+
+            if dirent.attributes & 8:
+                attr.append('L')
+            if dirent.attributes & 4:
+                attr.append('E')
+            if dirent.attributes & 2:
+                attr.append('W')
+            if dirent.attributes & 1:
+                attr.append('R')
+            attr.append('/')
+            if dirent.attributes & 0x80:
+                attr.append('L')
+            if dirent.attributes & 0x40:
+                attr.append('E')
+            if dirent.attributes & 0x20:
+                attr.append('W')
+            if dirent.attributes & 0x10:
+                attr.append('R')
+
+            text += "%-10s  " % (''.join(attr),)
+
+            x += len(text)
+            if x > width:
+                pb.mos.write(b'\n')
+                x = len(text)
+
+            pb.mos.write(text)
+
+        if x != 0:
+            pb.mos.write(b'\n')
+
+        pb.mos.write("\n%s files\n" % (len(files),))
+        return True
 
     def fs_starting(self, pb):
         """
