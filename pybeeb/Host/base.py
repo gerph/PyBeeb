@@ -182,11 +182,15 @@ class OSRDCH(OSInterface):
     vector = 0x0210
 
     def call(self, pb):
-        ch = self.readc()
-        if ch is None:
-            return False
+        try:
+            ch = self.readc()
+            if ch is None:
+                return False
+            ch = ord(ch)
 
-        ch = ord(ch)
+        except KeyboardInterrupt:
+            ch = 27
+
         if ch == 27:
             pb.regs.carry = True
 
@@ -221,11 +225,15 @@ class OSRDCHpostbuffer(OSInterface):
             # A character was already read
             return False
 
-        ch = self.readc()
-        if ch is None:
-            return False
+        try:
+            ch = self.readc()
+            if ch is None:
+                return False
+            ch = ord(ch)
 
-        ch = ord(ch)
+        except KeyboardInterrupt:
+            ch = 27
+
         if ch == 27:
             # Bit of a hack as we don't have interrupts
             # Set the escape flag
@@ -307,6 +315,7 @@ class OSBYTE(OSInterface):
         self.dispatch_default = self.osbyte
 
     def osbyte(self, a, x, y, pb):
+        #print("OSByte &%02x, %i, %i" % (a, x, y))
         return False
 
 
@@ -323,7 +332,7 @@ class OSWORD(OSInterface):
 
     def dispatch_parameters(self, pb):
         """
-        Decode the paramters for the address.
+        Decode the parameters for the address.
         """
         address = pb.regs.x | (pb.regs.y << 8)
         return [pb.regs.a, address, pb]

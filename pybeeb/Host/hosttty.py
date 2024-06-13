@@ -117,6 +117,13 @@ class OSWORDtty(OSWORD):
         #          C=1 if an ESCAPE condition terminated input.
         #          Y contains line length, including carriage return if
         #          used.
+
+        # Check the exec handle first
+        exec_handle = pb.memory.readByte(0x256)
+        if exec_handle != 0:
+            # There's an exec in progress, so don't perform the host readline
+            return False
+
         input_memory = pb.memory.readWord(address)
         maxline = pb.memory.readByte(address + 2)
         lowest = pb.memory.readByte(address + 3)
