@@ -458,7 +458,7 @@ class Pb(object):
             self.regs.pc = begin
         try:
             while self.executing and self.regs.pc != until:
-                #print "%s: PC: %s" % (insts, hex(self.regs.pc))
+                #print("%s: PC: %s" % (insts, hex(self.regs.pc)))
 
                 self.bbc.tick()
                 insts += 1

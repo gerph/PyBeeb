@@ -60,7 +60,7 @@ class BBC(object):
 
         while True:
             if self.pcTrace:
-                print "%s: PC: %s" % (instr, hex(self.reg.pc))
+                print("%s: PC: %s" % (instr, hex(self.reg.pc)))
             instr += 1
 
             if not self.pcTrace and not self.verbose:

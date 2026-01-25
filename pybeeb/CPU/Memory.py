@@ -88,7 +88,7 @@ class Memory(object):
         else:
             readByte = self.memory[address]
 
-        #print "Read byte %s from %s" % (hex(readByte) , hex(address))
+        #print("Read byte %s from %s" % (hex(readByte) , hex(address)))
         return readByte
 
     def writeByte(self, address, value):
